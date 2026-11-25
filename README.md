@@ -59,7 +59,7 @@ Repository verification must run in an isolated container:
 
 The Docker skeleton uses `docker-compose.yml` with `network_mode: none`, a read-only filesystem, and an empty secret environment. The `DockerNotConfiguredRunner` explicitly reports that execution was not attempted.
 
-The current structured detector handles schema properties (including nested properties and array-item properties), field type changes, schema enum removals, operation removals, and parameter removals declared at either the path or operation level. It does not resolve `$ref` values, infer rename mappings, compare parameter schemas, or detect behavioral changes from schemas alone; unsupported OpenAPI constructs and dynamic runtime behavior remain uncovered.
+The current structured detector handles schema properties (including nested properties, array-item properties, and local component-schema `$ref` values), field type changes, schema enum removals, operation removals, and parameter removals declared at either the path or operation level. It does not resolve external or nested JSON Pointer references, infer rename mappings, compare parameter schemas, or detect behavioral changes from schemas alone; unsupported OpenAPI constructs and dynamic runtime behavior remain uncovered.
 
 ## Architecture
 

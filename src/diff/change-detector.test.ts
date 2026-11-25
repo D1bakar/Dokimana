@@ -66,6 +66,53 @@ describe('ChangeDetector', () => {
     expect(changes).toHaveLength(7);
   });
 
+  it('resolves local component schema references when comparing nested fields', async () => {
+    const oldDocument = JSON.parse(
+      await readFile(resolve('src/diff/fixtures/referenced-old.json'), 'utf8'),
+    ) as OpenApiInput;
+    const newDocument = JSON.parse(
+      await readFile(resolve('src/diff/fixtures/referenced-new.json'), 'utf8'),
+    ) as OpenApiInput;
+
+    const changes = new ChangeDetector().diff({
+      oldDocument,
+      newDocument,
+      oldVersion: '2025-01-01',
+      newVersion: '2025-02-01',
+    });
+
+    expect(changes.map(({ kind, resource, path }) => [kind, resource, path])).toEqual(
+      expect.arrayContaining([
+        ['field_removed', 'Address', 'legacy_code'],
+        ['field_removed', 'Customer', 'billing_address.legacy_code'],
+      ]),
+    );
+    expect(changes).toHaveLength(2);
+  });
+
+  it('terminates when local schema references are recursive', () => {
+    const recursiveDocument: OpenApiInput = {
+      components: {
+        schemas: {
+          Node: {
+            properties: {
+              parent: { $ref: '#/components/schemas/Node' },
+            },
+          },
+        },
+      },
+    };
+
+    expect(() =>
+      new ChangeDetector().diff({
+        oldDocument: recursiveDocument,
+        newDocument: recursiveDocument,
+        oldVersion: 'old',
+        newVersion: 'new',
+      }),
+    ).not.toThrow();
+  });
+
   it('reports a removed schema as a schema change rather than an endpoint removal', () => {
     const changes = new ChangeDetector().diff({
       oldDocument: {

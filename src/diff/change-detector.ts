@@ -37,9 +37,44 @@ function isOpenApi(value: OpenApiInput | FieldSnapshot[]): value is OpenApiInput
   return !Array.isArray(value);
 }
 
-function schemaFields(schema: OpenApiSchema): Map<string, SchemaField> {
+function resolveSchemaReference(
+  reference: string,
+  document: OpenApiInput,
+): OpenApiSchema | undefined {
+  const prefix = '#/components/schemas/';
+  if (!reference.startsWith(prefix)) return undefined;
+
+  const path = reference.slice(prefix.length).split('/');
+  if (path.length !== 1) return undefined;
+
+  const name = path[0]?.replace(/~1/g, '/').replace(/~0/g, '~');
+  return name ? document.components?.schemas?.[name] : undefined;
+}
+
+function schemaFields(schema: OpenApiSchema, document: OpenApiInput): Map<string, SchemaField> {
   const fields = new Map<string, SchemaField>();
-  const visit = (current: OpenApiSchema, prefix: string): void => {
+  const visitChildren = (
+    current: OpenApiSchema,
+    prefix: string,
+    resolvingReferences: Set<string>,
+  ): void => {
+    for (const [name, property] of Object.entries(current.properties ?? {})) {
+      visit(property, prefix ? `${prefix}.${name}` : name, resolvingReferences);
+    }
+    if (current.items) visit(current.items, `${prefix}[]`, resolvingReferences);
+
+    if (current.$ref && !resolvingReferences.has(current.$ref)) {
+      const referencedSchema = resolveSchemaReference(current.$ref, document);
+      if (referencedSchema) {
+        visitChildren(referencedSchema, prefix, new Set([...resolvingReferences, current.$ref]));
+      }
+    }
+  };
+  const visit = (
+    current: OpenApiSchema,
+    prefix: string,
+    resolvingReferences: Set<string>,
+  ): void => {
     const type =
       typeof current.type === 'string'
         ? current.type
@@ -58,15 +93,10 @@ function schemaFields(schema: OpenApiSchema): Map<string, SchemaField> {
       fields.set(prefix, field);
     }
 
-    for (const [name, property] of Object.entries(current.properties ?? {})) {
-      visit(property, prefix ? `${prefix}.${name}` : name);
-    }
-    if (current.items) visit(current.items, `${prefix}[]`);
+    visitChildren(current, prefix, resolvingReferences);
   };
 
-  for (const [name, property] of Object.entries(schema.properties ?? {})) {
-    visit(property, name);
-  }
+  visitChildren(schema, '', new Set());
   return fields;
 }
 
@@ -85,7 +115,7 @@ function openApiSchemaFields(
   return new Map(
     Object.entries(value.components?.schemas ?? {}).map(([resource, schema]) => [
       resource,
-      schemaFields(schema),
+      schemaFields(schema, value),
     ]),
   );
 }
