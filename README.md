@@ -101,7 +101,7 @@ Run measured benchmarks only with reviewed public fixtures and explicit ground t
 
 ## GitHub Action
 
-`action.yml` exposes a Docker Action. `.github/workflows/apiproof-example.yml` shows a pull-request scan skeleton. Add baseline OpenAPI files and reports for a repository before enabling PR comments.
+The Docker Action runs `scan` against workspace-relative OpenAPI inputs and writes an impact JSON file to the workspace. Its required inputs are `old-openapi`, `new-openapi`, `old-version`, and `new-version`; `repo` and `impact-output` are optional. The example workflow invokes the local action and uploads the generated report as a short-retention artifact. Use reviewed, pinned OpenAPI inputs; the example fixtures are synthetic and are not Stripe release baselines.
 
 ## 30-day delivery map
 

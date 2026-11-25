@@ -1,19 +1,43 @@
 name: ApiProof
 description: Detect Stripe breaking changes and report call-site impact
-runs:
-  using: docker
-  image: Dockerfile
-branding:
-  icon: shield
-  color: purple
 inputs:
   repo:
-    description: Repository root
+    description: Repository root relative to the checked-out workspace
     required: false
     default: .
   old-openapi:
-    description: Old structured OpenAPI JSON
+    description: Path to the old structured OpenAPI JSON, relative to the workspace
     required: true
   new-openapi:
-    description: New structured OpenAPI JSON
+    description: Path to the new structured OpenAPI JSON, relative to the workspace
     required: true
+  old-version:
+    description: Label used when the old OpenAPI document has no info.version
+    required: true
+  new-version:
+    description: Label used when the new OpenAPI document has no info.version
+    required: true
+  impact-output:
+    description: Impact JSON output path, relative to the workspace; its parent directory must exist
+    required: false
+    default: apiproof-impact.json
+runs:
+  using: docker
+  image: Dockerfile
+  args:
+    - scan
+    - --repo
+    - /github/workspace/${{ inputs.repo }}
+    - --old
+    - /github/workspace/${{ inputs.old-openapi }}
+    - --new
+    - /github/workspace/${{ inputs.new-openapi }}
+    - --old-version
+    - ${{ inputs.old-version }}
+    - --new-version
+    - ${{ inputs.new-version }}
+    - --json
+    - /github/workspace/${{ inputs.impact-output }}
+branding:
+  icon: shield
+  color: purple

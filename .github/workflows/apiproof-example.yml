@@ -12,9 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - run: npm ci
-      - run: npm run build
-      - run: npm run dev -- scan --repo . --old fixtures/stripe-old.json --new fixtures/stripe-new.json --old-version old --new-version new --json impact.json
+          persist-credentials: false
+      - name: Scan Stripe API changes
+        uses: ./
+        with:
+          repo: .
+          old-openapi: fixtures/stripe-old.json
+          new-openapi: fixtures/stripe-new.json
+          old-version: fixture-old
+          new-version: fixture-new
+          impact-output: apiproof-impact.json
+      - name: Upload impact report
+        uses: actions/upload-artifact@v4
+        with:
+          name: apiproof-impact
+          path: apiproof-impact.json
+          if-no-files-found: error
+          retention-days: 7
