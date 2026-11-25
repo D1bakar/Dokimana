@@ -104,6 +104,38 @@ describe('ChangeDetector', () => {
     expect(changes).toHaveLength(2);
   });
 
+  it('detects schema fields that become required, including nested fields', async () => {
+    const oldDocument = JSON.parse(
+      await readFile(resolve('src/diff/fixtures/schema-required-old.json'), 'utf8'),
+    ) as OpenApiInput;
+    const newDocument = JSON.parse(
+      await readFile(resolve('src/diff/fixtures/schema-required-new.json'), 'utf8'),
+    ) as OpenApiInput;
+
+    const changes = new ChangeDetector().diff({
+      oldDocument,
+      newDocument,
+      oldVersion: '2025-01-01',
+      newVersion: '2025-02-01',
+    });
+
+    expect(
+      changes.map(({ kind, resource, path, oldValue, newValue }) => [
+        kind,
+        resource,
+        path,
+        oldValue,
+        newValue,
+      ]),
+    ).toEqual(
+      expect.arrayContaining([
+        ['field_became_required', 'Customer', 'address', 'optional', 'required'],
+        ['field_became_required', 'Customer', 'address.city', 'optional', 'required'],
+      ]),
+    );
+    expect(changes).toHaveLength(2);
+  });
+
   it('detects removed parameter enum values without flagging removed constraints', async () => {
     const oldDocument = JSON.parse(
       await readFile(resolve('src/diff/fixtures/parameter-enum-old.json'), 'utf8'),

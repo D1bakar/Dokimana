@@ -1,0 +1,21 @@
+{
+  "openapi": "3.1.0",
+  "info": { "version": "2025-01-01" },
+  "components": {
+    "schemas": {
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "address": {
+            "type": "object",
+            "properties": {
+              "city": { "type": "string" },
+              "line1": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

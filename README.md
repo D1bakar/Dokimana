@@ -22,7 +22,9 @@ npm run dev -- scan \
   --new fixtures/stripe-new.json \
   --old-version 2024-12-18 \
   --new-version 2025-01-01 \
-  --json impact.json
+  --json impact.json \
+  --markdown apiproof-evidence.md \
+  --fail-on-changes true
 ```
 
 Create evidence from an impact report:
@@ -40,8 +42,8 @@ npm run dev -- report \
 - `scan` - detects removed schemas/operations/parameters, nested field removals, field type changes, and removed enum values from structured OpenAPI JSON, then uses ts-morph to locate likely Stripe SDK call sites. Renames are never guessed from similar names.
   - Only calls on statically identifiable Stripe client instances (`new Stripe(...)`, including `require('stripe')`) are matched. Object-literal keys are compared exactly, including nested paths and array-item paths such as `items[].field`. Local object literals assigned to a variable are resolved at medium confidence. Dynamic arguments, spreads, and computed keys are reported as unverified rather than guessed.
   - `node_modules`, `dist`, `build`, `coverage`, `vendor`, `out`, `.git`, and `.next` are skipped.
-- `verify` - validates environment safety and defines the intended container execution boundary. It does not start live network access.
-- `report` - produces terminal and Markdown evidence reports.
+- `verify` - validates test-mode key safety and reports an explicit `could_not_run` result until an isolated container runner is configured. It never falls back to host execution or live network access.
+- `report` - produces terminal and Markdown evidence reports, including the structured changes, call-site findings, patches, verification status, and explicit coverage limitations.
 - `doctor` - refuses live Stripe keys and reports test-key status.
 
 ## Safety model
@@ -59,7 +61,7 @@ Repository verification must run in an isolated container:
 
 The Docker skeleton uses `docker-compose.yml` with `network_mode: none`, a read-only filesystem, and an empty secret environment. The `DockerNotConfiguredRunner` explicitly reports that execution was not attempted.
 
-The current structured detector handles schema properties (including nested properties, array-item properties, and local component-schema `$ref` values), field type changes, schema enum removals, operation removals, and parameter removals, requiredness increases, direct schema type changes, and enum-value removals declared at either the path or operation level. It does not resolve external or nested JSON Pointer references, infer rename mappings, compare parameter constraints or referenced schemas, or detect behavioral changes from schemas alone; unsupported OpenAPI constructs and dynamic runtime behavior remain uncovered.
+The current structured detector handles schema properties (including nested properties, array-item properties, and local component-schema `$ref` values), field removals, requiredness increases, type changes, and enum-value removals. For operations it detects endpoint removals and parameter removals, requiredness increases, direct schema type changes, and enum-value removals at the path or operation level. It does not resolve external or nested JSON Pointer references, infer rename mappings, compare parameter constraints or referenced schemas, or detect behavioral changes from schemas alone; unsupported OpenAPI constructs and dynamic runtime behavior remain uncovered.
 
 ## Architecture
 
@@ -101,7 +103,7 @@ Run measured benchmarks only with reviewed public fixtures and explicit ground t
 
 ## GitHub Action
 
-`action.yml` exposes a Docker Action. `.github/workflows/apiproof-example.yml` shows a pull-request scan skeleton. Add baseline OpenAPI files and reports for a repository before enabling PR comments.
+The Docker Action runs `scan` against workspace-relative OpenAPI inputs and writes an impact JSON file and a Markdown evidence report to the workspace. Its required inputs are `old-openapi`, `new-openapi`, `old-version`, and `new-version`; `repo`, `impact-output`, `report-output`, and `fail-on-changes` are optional. The Action defaults to failing when changes are found, but writes both reports before returning a failing exit code. The example workflow disables the gate because its fixtures are synthetic, then uploads both reports as a short-retention artifact. Use reviewed, pinned OpenAPI inputs; those fixtures are not Stripe release baselines.
 
 ## 30-day delivery map
 

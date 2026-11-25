@@ -11,6 +11,9 @@ import {
 } from './reporter/reporter.js';
 import { assertSafeTestModeKeys, validateStripeKey } from './verifier/key-safety.js';
 import type { OpenApiInput } from './diff/structured-diff.js';
+import type { Scenario } from './domain/types.js';
+import { DockerNotConfiguredRunner } from './verifier/container-runner.js';
+import { Verifier } from './verifier/verifier.js';
 
 const program = new Command();
 program
@@ -26,33 +29,69 @@ program
   .requiredOption('--old-version <version>', 'Old provider version')
   .requiredOption('--new-version <version>', 'New provider version')
   .option('--json <file>', 'Write machine-readable impact report')
+  .option('--markdown <file>', 'Write Markdown evidence report')
+  .option(
+    '--fail-on-changes <boolean>',
+    'Exit with code 1 when structural changes are found',
+    parseBoolean,
+    false,
+  )
   .action(async (options) => {
-    const oldDocument = JSON.parse(await readFile(resolve(options.old), 'utf8')) as object;
-    const newDocument = JSON.parse(await readFile(resolve(options.new), 'utf8')) as object;
+    const oldDocument = JSON.parse(await readFile(resolve(options.old), 'utf8')) as OpenApiInput;
+    const newDocument = JSON.parse(await readFile(resolve(options.new), 'utf8')) as OpenApiInput;
     const changes = new ChangeDetector().diff({
-      oldDocument: oldDocument as OpenApiInput,
-      newDocument: newDocument as OpenApiInput,
+      oldDocument,
+      newDocument,
       oldVersion: options.oldVersion,
       newVersion: options.newVersion,
     });
     const impact = await new RepoScanner().scan(resolve(options.repo), changes);
     if (options.json) await writeFile(resolve(options.json), JSON.stringify(impact, null, 2));
+    if (options.markdown) {
+      const evidence = buildEvidenceReport({
+        repository: resolve(options.repo),
+        providerVersion: newDocument.info?.version ?? options.newVersion,
+        impact,
+        patches: [],
+        verification: [],
+      });
+      await writeFile(resolve(options.markdown), renderMarkdownReport(evidence));
+    }
     console.log(
       `Found ${changes.length} structured changes and ${impact.findings.length} impact findings.`,
     );
+    if (options.failOnChanges && changes.length > 0) {
+      console.error(`Failing scan because ${changes.length} structural change(s) were found.`);
+      process.exitCode = 1;
+    }
   });
 
 program
   .command('verify')
-  .description('Verify scenarios through injectable execution ports')
+  .description('Validate a scenario and report isolated execution status')
   .requiredOption('-r, --repo <path>', 'Repository root')
   .option('--scenario <file>', 'Scenario JSON file')
-  .action(async () => {
+  .option('--json <file>', 'Write the verification result as JSON')
+  .action(async (options) => {
     assertSafeTestModeKeys(process.env);
-    console.log('Key safety check passed. No live Stripe key is present.');
+    if (!options.scenario) {
+      throw new Error('Provide --scenario to verify; use doctor for a key-safety check.');
+    }
+
+    const scenario = parseScenario(JSON.parse(await readFile(resolve(options.scenario), 'utf8')));
+    const result = await new Verifier(
+      new DockerNotConfiguredRunner(),
+      resolve(options.repo),
+    ).verify(scenario, process.env);
+    if (options.json) await writeFile(resolve(options.json), JSON.stringify(result, null, 2));
     console.log(
-      'Execution is not started: configure a container runner implementation before verify.',
+      JSON.stringify({
+        scenarioId: result.scenarioId,
+        classification: result.classification,
+        reason: result.reason,
+      }),
     );
+    if (result.classification === 'could_not_run') process.exitCode = 1;
   });
 
 program
@@ -93,3 +132,44 @@ program.parseAsync(process.argv).catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });
+
+function parseBoolean(value: string): boolean {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  throw new Error(`Expected "true" or "false", received "${value}".`);
+}
+
+function parseScenario(value: unknown): Scenario {
+  if (!isRecord(value)) throw new Error('Scenario must be a JSON object.');
+  const id = readScenarioString(value, 'id');
+  const name = readScenarioString(value, 'name');
+  const description = readScenarioString(value, 'description');
+  const apiVersion = readScenarioString(value, 'apiVersion');
+  const operation = readScenarioString(value, 'operation');
+  if (!isRecord(value.input)) throw new Error('Scenario field "input" must be a JSON object.');
+  if (value.expectedOutput !== undefined && !isRecord(value.expectedOutput)) {
+    throw new Error('Scenario field "expectedOutput" must be a JSON object when provided.');
+  }
+
+  return {
+    id,
+    name,
+    description,
+    apiVersion,
+    operation,
+    input: value.input,
+    ...(value.expectedOutput === undefined ? {} : { expectedOutput: value.expectedOutput }),
+  };
+}
+
+function readScenarioString(value: Record<string, unknown>, field: string): string {
+  const entry = value[field];
+  if (typeof entry !== 'string' || entry.length === 0) {
+    throw new Error(`Scenario field "${field}" must be a non-empty string.`);
+  }
+  return entry;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
