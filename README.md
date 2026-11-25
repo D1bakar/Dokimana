@@ -38,6 +38,8 @@ npm run dev -- report \
 ## Commands
 
 - `scan` - detects removed schemas/operations/parameters, nested field removals, field type changes, and removed enum values from structured OpenAPI JSON, then uses ts-morph to locate likely Stripe SDK call sites. Renames are never guessed from similar names.
+  - Only calls on statically identifiable Stripe client instances (`new Stripe(...)`, including `require('stripe')`) are matched. Object-literal keys are compared exactly, including nested paths and array-item paths such as `items[].field`. Local object literals assigned to a variable are resolved at medium confidence. Dynamic arguments, spreads, and computed keys are reported as unverified rather than guessed.
+  - `node_modules`, `dist`, `build`, `coverage`, `vendor`, `out`, `.git`, and `.next` are skipped.
 - `verify` - validates environment safety and defines the intended container execution boundary. It does not start live network access.
 - `report` - produces terminal and Markdown evidence reports.
 - `doctor` - refuses live Stripe keys and reports test-key status.
@@ -86,6 +88,8 @@ Reports distinguish:
 - `could_not_run`
 
 They also state impact coverage as verified, partially verified, or unverified. Dynamic SDK calls, reflection, REST fetch calls, generated code, vendor code, and unsupported AST patterns are not claimed as verified coverage.
+
+Call-site findings are evidence with confidence, not proof of runtime behavior. Object-literal keys passed directly to a Stripe SDK call are reported at high confidence; keys resolved through a local object-literal variable, property reads on Stripe results, and destructured response fields are reported at medium confidence. Resource-level changes such as removed endpoints, schemas, or parameters are not mapped to call sites from static AST analysis and are listed as unverified coverage.
 
 Unsupported fixes return `needs_human`; ApiProof never invents replacement fields or semantics.
 
