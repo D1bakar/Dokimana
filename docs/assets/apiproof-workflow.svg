@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title description">
+  <title id="title">ApiProof workflow</title>
+  <desc id="description">Supplied old and new OpenAPI JSON documents are compared, supported changes are matched against source syntax, and impact evidence is written to JSON and Markdown. Scenario verification is not yet configured.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0 10 5 0 10Z" fill="#62748a"/>
+    </marker>
+    <style>
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; fill: #182431; }
+      .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 1.4px; fill: #54677b; }
+      .heading { font-size: 18px; font-weight: 700; }
+      .body { font-size: 14px; fill: #435367; }
+      .box { fill: #fff; stroke: #ccd6e0; stroke-width: 1.5; }
+      .flow { fill: none; stroke: #62748a; stroke-width: 2; marker-end: url(#arrow); }
+      .active { fill: #eef7f6; stroke: #148276; }
+      .disabled { fill: #f3f5f7; stroke: #a7b2bf; stroke-dasharray: 6 5; }
+    </style>
+  </defs>
+  <rect width="1200" height="340" rx="18" fill="#f7f9fb"/>
+  <text x="40" y="46" class="eyebrow">LOCAL INPUTS · DETERMINISTIC ANALYSIS · HONEST EVIDENCE</text>
+
+  <rect x="40" y="94" width="210" height="86" rx="12" class="box"/>
+  <text x="60" y="126" class="heading">OpenAPI inputs</text>
+  <text x="60" y="151" class="body">Old + new JSON documents</text>
+  <text x="60" y="170" class="body">Supplied locally; no fetching</text>
+
+  <path d="M250 137h45" class="flow"/>
+  <rect x="305" y="94" width="220" height="86" rx="12" class="box active"/>
+  <text x="325" y="126" class="heading">Structural diff</text>
+  <text x="325" y="151" class="body">Supported schema and</text>
+  <text x="325" y="170" class="body">operation changes only</text>
+
+  <path d="M525 137h45" class="flow"/>
+  <rect x="580" y="94" width="220" height="86" rx="12" class="box active"/>
+  <text x="600" y="126" class="heading">AST impact scan</text>
+  <text x="600" y="151" class="body">TypeScript + JavaScript</text>
+  <text x="600" y="170" class="body">Evidence with confidence</text>
+
+  <path d="M800 137h45" class="flow"/>
+  <rect x="855" y="94" width="305" height="86" rx="12" class="box active"/>
+  <text x="875" y="126" class="heading">Review artifacts</text>
+  <text x="875" y="151" class="body">Impact JSON + Markdown report</text>
+  <text x="875" y="170" class="body">Optional CI failure gate</text>
+
+  <rect x="305" y="224" width="855" height="76" rx="12" class="box disabled"/>
+  <text x="325" y="254" class="heading">Scenario verification · not configured</text>
+  <text x="325" y="279" class="body">The current runner does not execute code; results remain could_not_run, never a pass.</text>
+</svg>

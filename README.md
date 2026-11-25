@@ -1,123 +1,141 @@
 # ApiProof
 
-ApiProof is a CLI-first, local-first MVP for detecting Stripe breaking changes, finding affected TypeScript/JavaScript call sites, proposing only explicitly supported fixes, and producing PR evidence.
+ApiProof is an early, local-first CLI and GitHub Action for detecting structural changes between Stripe OpenAPI documents and finding likely affected TypeScript and JavaScript call sites. It produces machine-readable impact data and Markdown evidence for code review.
 
-## Quick start
+**Current limitation:** scenario verification is not implemented end to end. The `verify` command checks key safety, then returns `could_not_run` because the isolated execution runner is a deliberate stub. ApiProof does not claim that a scan proves an application is safe.
 
-Requirements: Node.js 20+ and npm.
+## What works today
+
+| Area                  | Available now                                                                                                                                                                                                 | Not covered / not yet available                                                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Change detection      | Compare supplied OpenAPI JSON for supported schema and operation changes, including removals, requiredness increases, type changes, and enum-value removals. Local component-schema references are supported. | Fetching Stripe inputs, external or nested JSON Pointer references, parameter constraints, referenced parameter schemas, and behavioral changes. |
+| Impact scan           | Use `ts-morph` to inspect TypeScript/JavaScript and report likely call sites for statically identified Stripe clients. Findings include evidence and confidence.                                              | Dynamic client construction, reflection, REST calls, generated/vendor code, and a complete map from resource-level changes to call sites.        |
+| Fix proposals         | A library interface can propose a deterministic rename only when an explicit old-to-new mapping is supplied. Unsupported changes return `needs_human`.                                                        | Rename discovery, general-purpose fixes, and a CLI command that applies patches.                                                                 |
+| Scenario verification | Validate scenario input and reject live or unrecognized Stripe key formats before any scenario execution.                                                                                                     | Executing old/new application scenarios. The current runner always reports `could_not_run`; no behavior comparison is performed.                 |
+| Reports and Action    | Write JSON impact data and Markdown evidence. The Docker-based GitHub Action runs a scan against workspace-relative OpenAPI files.                                                                            | Automatic provider retrieval, PR comments, and a production-ready verification runner.                                                           |
+| Benchmarks            | A 20-repository data model and harness that reports results as unmeasured.                                                                                                                                    | External benchmark results; none are claimed.                                                                                                    |
+
+AST results are evidence, not proof of runtime behavior. A scan that finds no impact is not proof that no impact exists. Review the report's coverage limitations before relying on it.
+
+## Data flow
+
+![ApiProof workflow from supplied OpenAPI documents through structural diff and AST impact scan to review artifacts. Verification is shown as not configured.](docs/assets/apiproof-workflow.svg)
+
+## Architecture
+
+![ApiProof module architecture, showing injected provider and execution ports and the current unconfigured verification runner.](docs/assets/apiproof-architecture.svg)
+
+The CLI coordinates modules under `src/`: `diff` compares structured documents, `scanner` inspects source syntax, `fixes` contains constrained proposal logic, `verifier` defines key-safety and execution boundaries, and `reporter` formats evidence. Provider retrieval and repository execution are represented by interfaces; they are not implemented as live network fetching or host execution.
+
+## Requirements and setup
+
+- Node.js 20 or newer
+- npm
 
 ```bash
-npm install
+git clone https://github.com/D1bakar/Dokimana.git
+cd Dokimana
+npm ci
 npm run build
-npm test
-npm run dev -- doctor
+npm start -- doctor
 ```
 
-Example scan:
+For development, run the CLI source through `tsx`:
+
+```bash
+npm run dev -- doctor
+npm run dev -- --help
+```
+
+## CLI
+
+### Scan two OpenAPI documents
+
+The checked-in fixture pair is synthetic and exists for demonstration and tests; it is not a Stripe release baseline.
 
 ```bash
 npm run dev -- scan \
   --repo . \
   --old fixtures/stripe-old.json \
   --new fixtures/stripe-new.json \
-  --old-version 2024-12-18 \
-  --new-version 2025-01-01 \
-  --json impact.json \
-  --markdown apiproof-evidence.md \
-  --fail-on-changes true
+  --old-version fixture-old \
+  --new-version fixture-new \
+  --json apiproof-impact.json \
+  --markdown apiproof-evidence.md
 ```
 
-Create evidence from an impact report:
+`scan` reports detected structural changes and likely impact findings. Add `--fail-on-changes true` to return exit code 1 when structural changes are found. Reports are written before that failure gate is applied.
+
+### Create a Markdown report from impact JSON
 
 ```bash
 npm run dev -- report \
   --repo . \
-  --impact impact.json \
-  --provider-version 2025-01-01 \
+  --impact apiproof-impact.json \
+  --provider-version fixture-new \
   --output apiproof-evidence.md
 ```
 
-## Commands
+### Check key safety and verification status
 
-- `scan` - detects removed schemas/operations/parameters, nested field removals, field type changes, and removed enum values from structured OpenAPI JSON, then uses ts-morph to locate likely Stripe SDK call sites. Renames are never guessed from similar names.
-  - Only calls on statically identifiable Stripe client instances (`new Stripe(...)`, including `require('stripe')`) are matched. Object-literal keys are compared exactly, including nested paths and array-item paths such as `items[].field`. Local object literals assigned to a variable are resolved at medium confidence. Dynamic arguments, spreads, and computed keys are reported as unverified rather than guessed.
-  - `node_modules`, `dist`, `build`, `coverage`, `vendor`, `out`, `.git`, and `.next` are skipped.
-- `verify` - validates test-mode key safety and reports an explicit `could_not_run` result until an isolated container runner is configured. It never falls back to host execution or live network access.
-- `report` - produces terminal and Markdown evidence reports, including the structured changes, call-site findings, patches, verification status, and explicit coverage limitations.
-- `doctor` - refuses live Stripe keys and reports test-key status.
-
-## Safety model
-
-ApiProof refuses `sk_live` keys and any key format that cannot be positively identified as test mode. Live Stripe API access is not implemented.
-
-Repository verification must run in an isolated container:
-
-- network disabled or explicitly restricted;
-- no secrets injected;
-- read-only source mount;
-- timeout and resource limits;
-- pinned toolchain and dependencies;
-- no host Docker socket.
-
-The Docker skeleton uses `docker-compose.yml` with `network_mode: none`, a read-only filesystem, and an empty secret environment. The `DockerNotConfiguredRunner` explicitly reports that execution was not attempted.
-
-The current structured detector handles schema properties (including nested properties, array-item properties, and local component-schema `$ref` values), field removals, requiredness increases, type changes, and enum-value removals. For operations it detects endpoint removals and parameter removals, requiredness increases, direct schema type changes, and enum-value removals at the path or operation level. It does not resolve external or nested JSON Pointer references, infer rename mappings, compare parameter constraints or referenced schemas, or detect behavioral changes from schemas alone; unsupported OpenAPI constructs and dynamic runtime behavior remain uncovered.
-
-## Architecture
-
-```text
-src/
-  domain/       Structural types and evidence models
-  diff/         Injected provider fetch, structured OpenAPI/JSON diff
-  scanner/      ts-morph AST call-site impact analysis
-  fixes/        Constrained patch generation
-  verifier/     Safe test-mode and container execution ports
-  reporter/     Terminal and Markdown output
-  cli.ts        CLI-first entry point
+```bash
+npm run dev -- doctor
+npm run dev -- verify --repo . --scenario ./scenario.json --json verification.json
 ```
 
-Contributor instructions are in [`agent.md`](agent.md) (also referenced by [`AGENTS.md`](AGENTS.md)). The practical Git/GitHub workflow is in [`HOW_TO_USE_GIT_GITHUB.md`](HOW_TO_USE_GIT_GITHUB.md). Sourced research briefs are indexed in [`research/`](research/README.md).
-
-Provider access is behind `ProviderFetcher`. Repository execution is behind `ContainerExecutionPort` and `VersionExecutionPort`. These interfaces make provider and Docker implementations replaceable without granting ApiProof live-key access.
-
-## Honesty and coverage
-
-Reports distinguish:
-
-- `equivalent`
-- `intentionally_different`
-- `unexplained_difference`
-- `could_not_run`
-
-They also state impact coverage as verified, partially verified, or unverified. Dynamic SDK calls, reflection, REST fetch calls, generated code, vendor code, and unsupported AST patterns are not claimed as verified coverage.
-
-Call-site findings are evidence with confidence, not proof of runtime behavior. Object-literal keys passed directly to a Stripe SDK call are reported at high confidence; keys resolved through a local object-literal variable, property reads on Stripe results, and destructured response fields are reported at medium confidence. Resource-level changes such as removed endpoints, schemas, or parameters are not mapped to call sites from static AST analysis and are listed as unverified coverage.
-
-Unsupported fixes return `needs_human`; ApiProof never invents replacement fields or semantics.
-
-## Benchmarks
-
-The initial benchmark harness has 20 public-repository slots in `benchmarks/data-model.ts`. `npm run benchmark` emits `measured: false`; no external numbers are claimed.
-
-Run measured benchmarks only with reviewed public fixtures and explicit ground truth.
+`doctor` checks `STRIPE_SECRET_KEY`. `verify` requires a scenario JSON object with `id`, `name`, `description`, `apiVersion`, `operation`, and an object-valued `input`; `expectedOutput` is optional. Until an isolated runner is implemented, a valid scenario still returns `could_not_run` and exits unsuccessfully. Do not interpret that result as a test pass.
 
 ## GitHub Action
 
-The Docker Action runs `scan` against workspace-relative OpenAPI inputs and writes an impact JSON file and a Markdown evidence report to the workspace. Its required inputs are `old-openapi`, `new-openapi`, `old-version`, and `new-version`; `repo`, `impact-output`, `report-output`, and `fail-on-changes` are optional. The Action defaults to failing when changes are found, but writes both reports before returning a failing exit code. The example workflow disables the gate because its fixtures are synthetic, then uploads both reports as a short-retention artifact. Use reviewed, pinned OpenAPI inputs; those fixtures are not Stripe release baselines.
+The Action scans supplied old/new OpenAPI JSON files in the checked-out workspace and writes an impact JSON report plus a Markdown evidence report. This repository's example workflow uses the local Action:
 
-## 30-day delivery map
+```yaml
+- uses: ./
+  with:
+    repo: .
+    old-openapi: path/to/old-openapi.json
+    new-openapi: path/to/new-openapi.json
+    old-version: old-version-label
+    new-version: new-version-label
+    impact-output: apiproof-impact.json
+    report-output: apiproof-evidence.md
+    fail-on-changes: 'true'
+```
 
-1. Stabilize structured change ingestion and typed Stripe fixtures.
-2. Increase AST coverage for SDK resources and nested field arguments.
-3. Implement Docker runner with pinned images and resource limits.
-4. Add test-mode Stripe scenario execution and output normalization.
-5. Expand constrained fixes only from reviewed field mappings.
-6. Run a 20-repository public benchmark and publish measured limitations.
+The required inputs are `old-openapi`, `new-openapi`, `old-version`, and `new-version`. `repo`, `impact-output`, `report-output`, and `fail-on-changes` are optional. The default change gate is enabled. The Action does not download inputs or call Stripe; pin and review the OpenAPI inputs in your own workflow.
 
-## Open questions
+## Security and verification boundaries
 
-- Which Stripe SDK versions and API operations are initial supported scope?
-- How should provider changelog entries map to canonical OpenAPI resource paths?
-- Which test-mode scenario fixtures are safe and reproducible?
-- How are intentional output differences supplied to verification?
-- How will PR comments authenticate and where should reports be retained?
+- Live Stripe secrets (`sk_live`) are forbidden. `verify` scans environment values for live-key patterns and accepts only positively identified `sk_test_*` or `rk_test_*` values in Stripe key variables. Unrecognized formats are rejected.
+- ApiProof does not make live Stripe API calls. The current CLI reads local files; provider retrieval remains an injectable interface.
+- `verify` does not execute repository code today. `DockerNotConfiguredRunner` returns `could_not_run` without running the scenario.
+- `docker-compose.yml` is an isolation-oriented example, not a configured verification engine. It does not make the current stub execute code.
+- Any future repository execution must use an isolated container with no secrets, no network by default, a read-only source mount, resource limits, and no host Docker socket. Do not run untrusted repository scripts on the host.
+- Never infer replacement API fields or semantics. If there is no explicit supported mapping, the safe outcome is human review.
+
+## Development
+
+```bash
+npm ci
+npm run build
+npm test
+npm run lint
+npm run format:check
+```
+
+Tests use local fixtures; no Stripe credentials or external API calls are required. Before contributing, read [`agent.md`](agent.md), [`AGENTS.md`](AGENTS.md), and [`HOW_TO_USE_GIT_GITHUB.md`](HOW_TO_USE_GIT_GITHUB.md). Research briefs and their sources are indexed in [`research/`](research/README.md).
+
+## Benchmark status
+
+`npm run benchmark` prints the 20-repository benchmark template with `measured: false` and `status: not_run`. These are empty slots, not measured outcomes. Do not cite them as validation results.
+
+## Roadmap
+
+The following are proposed next steps, not existing capabilities:
+
+1. Define and review pinned Stripe OpenAPI inputs and supported-version scope.
+2. Expand AST coverage with representative fixtures and explicit coverage reporting.
+3. Implement and threat-model an isolated container runner before executing repository code.
+4. Add reproducible test-mode scenarios and explicit output normalization.
+5. Add only reviewed, evidence-backed fix mappings.
+6. Run a public benchmark against reviewed ground truth and publish measured results and limitations.
