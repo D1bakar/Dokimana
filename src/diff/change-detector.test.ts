@@ -104,6 +104,30 @@ describe('ChangeDetector', () => {
     expect(changes).toHaveLength(2);
   });
 
+  it('detects removed parameter enum values without flagging removed constraints', async () => {
+    const oldDocument = JSON.parse(
+      await readFile(resolve('src/diff/fixtures/parameter-enum-old.json'), 'utf8'),
+    ) as OpenApiInput;
+    const newDocument = JSON.parse(
+      await readFile(resolve('src/diff/fixtures/parameter-enum-new.json'), 'utf8'),
+    ) as OpenApiInput;
+
+    const changes = new ChangeDetector().diff({
+      oldDocument,
+      newDocument,
+      oldVersion: '2025-01-01',
+      newVersion: '2025-02-01',
+    });
+
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({
+      kind: 'parameter_enum_value_removed',
+      resource: 'get /v1/customers',
+      path: 'query.include',
+      oldValue: 'full',
+    });
+  });
+
   it('resolves local component schema references when comparing nested fields', async () => {
     const oldDocument = JSON.parse(
       await readFile(resolve('src/diff/fixtures/referenced-old.json'), 'utf8'),

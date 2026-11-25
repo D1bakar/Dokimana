@@ -33,6 +33,7 @@ interface OpenApiParameter {
   serialized: string;
   required: boolean;
   schemaType?: string;
+  enumValues?: unknown[];
 }
 
 function checksum(value: unknown): string {
@@ -186,10 +187,12 @@ function parameterMap(...operations: Record<string, unknown>[]): Map<string, Ope
           : Array.isArray(schema?.type) && schema.type.every((type) => typeof type === 'string')
             ? [...schema.type].sort().join('|')
             : undefined;
+      const enumValues = Array.isArray(schema?.enum) ? schema.enum : undefined;
       const details: OpenApiParameter = {
         serialized: serializeValue(parameter),
         required: parameter.in === 'path' || parameter.required === true,
         ...(schemaType === undefined ? {} : { schemaType }),
+        ...(enumValues === undefined ? {} : { enumValues }),
       };
       result.set(path, details);
     }
@@ -335,6 +338,24 @@ export class ChangeDetector {
                 source,
               ),
             );
+          }
+
+          if (oldParameter.enumValues && nextParameter.enumValues) {
+            const nextValues = new Set(nextParameter.enumValues.map(serializeValue));
+            for (const value of oldParameter.enumValues) {
+              if (!nextValues.has(serializeValue(value))) {
+                records.push(
+                  this.makeRecord(
+                    operationId,
+                    'parameter_enum_value_removed',
+                    parameterPath,
+                    serializeValue(value),
+                    undefined,
+                    source,
+                  ),
+                );
+              }
+            }
           }
         }
       }
