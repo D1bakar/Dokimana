@@ -37,7 +37,7 @@ npm run dev -- report \
 
 ## Commands
 
-- `scan` - compares structured OpenAPI JSON and uses ts-morph to locate Stripe SDK call fields.
+- `scan` - detects removed schemas/operations/parameters, nested field removals, field type changes, and removed enum values from structured OpenAPI JSON, then uses ts-morph to locate likely Stripe SDK call sites. Renames are never guessed from similar names.
 - `verify` - validates environment safety and defines the intended container execution boundary. It does not start live network access.
 - `report` - produces terminal and Markdown evidence reports.
 - `doctor` - refuses live Stripe keys and reports test-key status.
@@ -56,6 +56,8 @@ Repository verification must run in an isolated container:
 - no host Docker socket.
 
 The Docker skeleton uses `docker-compose.yml` with `network_mode: none`, a read-only filesystem, and an empty secret environment. The `DockerNotConfiguredRunner` explicitly reports that execution was not attempted.
+
+The current structured detector handles schema properties (including nested properties and array-item properties), field type changes, schema enum removals, operation removals, and parameter removals declared at either the path or operation level. It does not resolve `$ref` values, infer rename mappings, compare parameter schemas, or detect behavioral changes from schemas alone; unsupported OpenAPI constructs and dynamic runtime behavior remain uncovered.
 
 ## Architecture
 

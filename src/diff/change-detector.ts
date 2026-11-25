@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { ChangeKind, ChangeRecord, ProviderSource } from '../domain/types.js';
 import { structuredChangeId } from './structured-diff.js';
-import type { FieldSnapshot, OpenApiInput } from './structured-diff.js';
+import type { FieldSnapshot, OpenApiInput, OpenApiSchema } from './structured-diff.js';
+
+const httpMethods = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace']);
 
 export interface ProviderFetcher {
   fetchOpenApi(provider: 'stripe', version: string): Promise<OpenApiInput>;
@@ -16,6 +18,17 @@ export interface ChangeDetectorInput {
   sourceKind?: 'openapi' | 'changelog';
 }
 
+interface SchemaField {
+  type: string;
+  enumValues?: unknown[];
+}
+
+interface OpenApiOperation {
+  route: string;
+  method: string;
+  parameters: Map<string, string>;
+}
+
 function checksum(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
@@ -24,38 +37,131 @@ function isOpenApi(value: OpenApiInput | FieldSnapshot[]): value is OpenApiInput
   return !Array.isArray(value);
 }
 
-function snapshots(value: OpenApiInput | FieldSnapshot[]): FieldSnapshot[] {
-  if (Array.isArray(value)) return value;
-  if (!value.components?.schemas) return [];
-  return Object.entries(value.components.schemas).map(([resource, schema]) => {
-    const properties =
-      typeof schema.properties === 'object' && schema.properties
-        ? (schema.properties as Record<string, { type?: unknown }>)
-        : {};
-    const fields = Object.fromEntries(
-      Object.entries(properties).map(([name, definition]) => [
-        name,
-        typeof definition.type === 'string' ? definition.type : 'unknown',
+function schemaFields(schema: OpenApiSchema): Map<string, SchemaField> {
+  const fields = new Map<string, SchemaField>();
+  const visit = (current: OpenApiSchema, prefix: string): void => {
+    const type =
+      typeof current.type === 'string'
+        ? current.type
+        : Array.isArray(current.type)
+          ? current.type.join('|')
+          : current.$ref
+            ? `ref:${current.$ref}`
+            : current.properties
+              ? 'object'
+              : current.items
+                ? 'array'
+                : 'unknown';
+
+    if (prefix) {
+      const field = current.enum ? { type, enumValues: current.enum } : { type };
+      fields.set(prefix, field);
+    }
+
+    for (const [name, property] of Object.entries(current.properties ?? {})) {
+      visit(property, prefix ? `${prefix}.${name}` : name);
+    }
+    if (current.items) visit(current.items, `${prefix}[]`);
+  };
+
+  for (const [name, property] of Object.entries(schema.properties ?? {})) {
+    visit(property, name);
+  }
+  return fields;
+}
+
+function openApiSchemaFields(
+  value: OpenApiInput | FieldSnapshot[],
+): Map<string, Map<string, SchemaField>> {
+  if (Array.isArray(value)) {
+    return new Map(
+      value.map((snapshot) => [
+        snapshot.resource,
+        new Map(Object.entries(snapshot.fields).map(([path, type]) => [path, { type }])),
       ]),
     );
-    return { resource, fields };
-  });
+  }
+
+  return new Map(
+    Object.entries(value.components?.schemas ?? {}).map(([resource, schema]) => [
+      resource,
+      schemaFields(schema),
+    ]),
+  );
+}
+
+function serializeValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value === undefined) return 'undefined';
+  return JSON.stringify(canonicalize(value)) ?? String(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, canonicalize(value[key])]),
+  );
+}
+
+function operationEntries(document: OpenApiInput): OpenApiOperation[] {
+  const operations: OpenApiOperation[] = [];
+  for (const [route, pathItem] of Object.entries(document.paths ?? {})) {
+    if (!isRecord(pathItem)) continue;
+    for (const [method, operation] of Object.entries(pathItem)) {
+      if (httpMethods.has(method.toLowerCase()) && isRecord(operation)) {
+        operations.push({
+          route,
+          method: method.toLowerCase(),
+          parameters: parameterMap(pathItem, operation),
+        });
+      }
+    }
+  }
+  return operations.sort(
+    (left, right) =>
+      left.route.localeCompare(right.route) || left.method.localeCompare(right.method),
+  );
+}
+
+function parameterMap(...operations: Record<string, unknown>[]): Map<string, string> {
+  const result = new Map<string, string>();
+  for (const operation of operations) {
+    const parameters = Array.isArray(operation.parameters) ? operation.parameters : [];
+    for (const parameter of parameters) {
+      if (
+        !isRecord(parameter) ||
+        typeof parameter.name !== 'string' ||
+        typeof parameter.in !== 'string'
+      ) {
+        continue;
+      }
+      const path = `${parameter.in}.${parameter.name}`;
+      result.set(path, serializeValue(parameter));
+    }
+  }
+  return result;
 }
 
 export class ChangeDetector {
   constructor(private readonly fetcher?: ProviderFetcher) {}
 
   diff(input: ChangeDetectorInput): ChangeRecord[] {
-    const oldSnapshots = snapshots(input.oldDocument);
-    const newSnapshots = snapshots(input.newDocument);
-    const newByResource = new Map(newSnapshots.map((item) => [item.resource, item]));
-    const sourceKind = input.sourceKind ?? 'openapi';
-    const newDocumentVersion =
-      !isOpenApi(input.newDocument) || !input.newDocument.info?.version
-        ? input.newVersion
-        : input.newDocument.info.version;
+    const oldSchemas = openApiSchemaFields(input.oldDocument);
+    const newSchemas = openApiSchemaFields(input.newDocument);
+    const oldOpenApi = isOpenApi(input.oldDocument) ? input.oldDocument : undefined;
+    const newOpenApi = isOpenApi(input.newDocument) ? input.newDocument : undefined;
+    const newDocumentVersion = !newOpenApi?.info?.version
+      ? input.newVersion
+      : newOpenApi.info.version;
     const source: ProviderSource = {
-      kind: sourceKind,
+      kind: input.sourceKind ?? 'openapi',
       provider: 'stripe',
       version: newDocumentVersion,
       fetchedAt: new Date().toISOString(),
@@ -63,36 +169,98 @@ export class ChangeDetector {
     };
 
     const records: ChangeRecord[] = [];
-    for (const old of oldSnapshots) {
-      const next = newByResource.get(old.resource);
-      if (!next) {
+    for (const [resource, oldFields] of oldSchemas) {
+      const newFields = newSchemas.get(resource);
+      if (!newFields) {
         records.push(
-          this.makeRecord(old.resource, 'endpoint_removed', old.resource, '', undefined, source),
+          this.makeRecord(
+            resource,
+            'schema_removed',
+            resource,
+            `schema:${resource}`,
+            undefined,
+            source,
+          ),
         );
+        continue;
       }
-      for (const [fieldName, oldType] of Object.entries(old.fields)) {
-        const newType = next?.fields[fieldName];
-        if (newType === undefined) {
+
+      for (const [path, oldField] of oldFields) {
+        const newField = newFields.get(path);
+        if (!newField) {
           records.push(
-            this.makeRecord(old.resource, 'field_removed', fieldName, oldType, undefined, source),
+            this.makeRecord(resource, 'field_removed', path, oldField.type, undefined, source),
           );
           continue;
         }
-        if (newType !== oldType) {
+
+        if (oldField.type !== newField.type) {
           records.push(
             this.makeRecord(
-              old.resource,
+              resource,
               'field_type_changed',
-              fieldName,
-              oldType,
-              newType,
+              path,
+              oldField.type,
+              newField.type,
               source,
             ),
           );
         }
+
+        if (oldField.enumValues) {
+          const nextValues = new Set((newField.enumValues ?? []).map(serializeValue));
+          for (const value of oldField.enumValues) {
+            if (!nextValues.has(serializeValue(value))) {
+              records.push(
+                this.makeRecord(
+                  resource,
+                  'enum_value_removed',
+                  path,
+                  serializeValue(value),
+                  undefined,
+                  source,
+                ),
+              );
+            }
+          }
+        }
       }
     }
-    return records;
+
+    if (oldOpenApi?.paths && newOpenApi?.paths) {
+      const oldOperations = operationEntries(oldOpenApi);
+      const newOperations = new Map(
+        operationEntries(newOpenApi).map((entry) => [`${entry.method} ${entry.route}`, entry]),
+      );
+      for (const { route, method, parameters: oldParameters } of oldOperations) {
+        const operationId = `${method} ${route}`;
+        const newOperation = newOperations.get(operationId);
+        if (!newOperation) {
+          records.push(
+            this.makeRecord(route, 'endpoint_removed', method, operationId, undefined, source),
+          );
+          continue;
+        }
+
+        const nextParameters = newOperation.parameters;
+        for (const [parameterPath, oldParameter] of oldParameters) {
+          if (!nextParameters.has(parameterPath)) {
+            records.push(
+              this.makeRecord(
+                operationId,
+                'parameter_removed',
+                parameterPath,
+                oldParameter,
+                undefined,
+                source,
+              ),
+            );
+          }
+        }
+      }
+    }
+
+    return records.sort((left, right) => left.id.localeCompare(right.id));
   }
 
   async fetchAndDiff(
