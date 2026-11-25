@@ -26,7 +26,13 @@ interface SchemaField {
 interface OpenApiOperation {
   route: string;
   method: string;
-  parameters: Map<string, string>;
+  parameters: Map<string, OpenApiParameter>;
+}
+
+interface OpenApiParameter {
+  serialized: string;
+  required: boolean;
+  schemaType?: string;
 }
 
 function checksum(value: unknown): string {
@@ -160,8 +166,8 @@ function operationEntries(document: OpenApiInput): OpenApiOperation[] {
   );
 }
 
-function parameterMap(...operations: Record<string, unknown>[]): Map<string, string> {
-  const result = new Map<string, string>();
+function parameterMap(...operations: Record<string, unknown>[]): Map<string, OpenApiParameter> {
+  const result = new Map<string, OpenApiParameter>();
   for (const operation of operations) {
     const parameters = Array.isArray(operation.parameters) ? operation.parameters : [];
     for (const parameter of parameters) {
@@ -173,7 +179,19 @@ function parameterMap(...operations: Record<string, unknown>[]): Map<string, str
         continue;
       }
       const path = `${parameter.in}.${parameter.name}`;
-      result.set(path, serializeValue(parameter));
+      const schema = isRecord(parameter.schema) ? parameter.schema : undefined;
+      const schemaType =
+        typeof schema?.type === 'string'
+          ? schema.type
+          : Array.isArray(schema?.type) && schema.type.every((type) => typeof type === 'string')
+            ? [...schema.type].sort().join('|')
+            : undefined;
+      const details: OpenApiParameter = {
+        serialized: serializeValue(parameter),
+        required: parameter.in === 'path' || parameter.required === true,
+        ...(schemaType === undefined ? {} : { schemaType }),
+      };
+      result.set(path, details);
     }
   }
   return result;
@@ -274,14 +292,46 @@ export class ChangeDetector {
 
         const nextParameters = newOperation.parameters;
         for (const [parameterPath, oldParameter] of oldParameters) {
-          if (!nextParameters.has(parameterPath)) {
+          const nextParameter = nextParameters.get(parameterPath);
+          if (!nextParameter) {
             records.push(
               this.makeRecord(
                 operationId,
                 'parameter_removed',
                 parameterPath,
-                oldParameter,
+                oldParameter.serialized,
                 undefined,
+                source,
+              ),
+            );
+            continue;
+          }
+
+          if (!oldParameter.required && nextParameter.required) {
+            records.push(
+              this.makeRecord(
+                operationId,
+                'parameter_became_required',
+                parameterPath,
+                'optional',
+                'required',
+                source,
+              ),
+            );
+          }
+
+          if (
+            oldParameter.schemaType !== undefined &&
+            nextParameter.schemaType !== undefined &&
+            oldParameter.schemaType !== nextParameter.schemaType
+          ) {
+            records.push(
+              this.makeRecord(
+                operationId,
+                'parameter_type_changed',
+                parameterPath,
+                oldParameter.schemaType,
+                nextParameter.schemaType,
                 source,
               ),
             );

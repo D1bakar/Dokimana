@@ -66,6 +66,44 @@ describe('ChangeDetector', () => {
     expect(changes).toHaveLength(7);
   });
 
+  it('detects parameters becoming required and changing schema type', async () => {
+    const oldDocument = JSON.parse(
+      await readFile(resolve('src/diff/fixtures/parameter-changes-old.json'), 'utf8'),
+    ) as OpenApiInput;
+    const newDocument = JSON.parse(
+      await readFile(resolve('src/diff/fixtures/parameter-changes-new.json'), 'utf8'),
+    ) as OpenApiInput;
+
+    const changes = new ChangeDetector().diff({
+      oldDocument,
+      newDocument,
+      oldVersion: '2025-01-01',
+      newVersion: '2025-02-01',
+    });
+
+    expect(
+      changes.map(({ kind, resource, path, oldValue, newValue }) => [
+        kind,
+        resource,
+        path,
+        oldValue,
+        newValue,
+      ]),
+    ).toEqual(
+      expect.arrayContaining([
+        [
+          'parameter_became_required',
+          'get /v1/customers/{id}',
+          'query.limit',
+          'optional',
+          'required',
+        ],
+        ['parameter_type_changed', 'get /v1/customers/{id}', 'query.limit', 'integer', 'string'],
+      ]),
+    );
+    expect(changes).toHaveLength(2);
+  });
+
   it('resolves local component schema references when comparing nested fields', async () => {
     const oldDocument = JSON.parse(
       await readFile(resolve('src/diff/fixtures/referenced-old.json'), 'utf8'),
