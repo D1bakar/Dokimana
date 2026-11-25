@@ -9,12 +9,12 @@
     "node": ">=20"
   },
   "bin": {
-    "apiproof": "./dist/cli.js"
+    "apiproof": "./dist/src/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
-    "start": "node dist/cli.js",
+    "start": "node dist/src/cli.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint . --max-warnings=0",
