@@ -1,0 +1,35 @@
+{
+  "openapi": "3.1.0",
+  "info": { "version": "2025-02-01" },
+  "components": {
+    "schemas": {
+      "Customer": {
+        "properties": {
+          "id": { "type": "integer" },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "address": {
+            "type": "object",
+            "properties": {
+              "line1": { "type": "string" }
+            }
+          },
+          "status": { "type": "string", "enum": ["active"] }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/v1/customers/{id}": {
+      "get": {
+        "operationId": "getCustomer",
+        "parameters": [{ "name": "expand", "in": "query", "schema": { "type": "string" } }]
+      }
+    }
+  }
+}

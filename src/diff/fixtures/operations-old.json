@@ -1,0 +1,48 @@
+{
+  "openapi": "3.1.0",
+  "info": { "version": "2025-01-01" },
+  "components": {
+    "schemas": {
+      "Customer": {
+        "properties": {
+          "id": { "type": "string" },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "legacy_code": { "type": "string" }
+              }
+            }
+          },
+          "address": {
+            "type": "object",
+            "properties": {
+              "line1": { "type": "string" },
+              "postal_code": { "type": "string" }
+            }
+          },
+          "status": { "type": "string", "enum": ["active", "pending"] }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/v1/customers/{id}": {
+      "parameters": [{ "name": "api_version", "in": "query", "schema": { "type": "string" } }],
+      "get": {
+        "operationId": "getCustomer",
+        "parameters": [
+          { "name": "expand", "in": "query", "schema": { "type": "string" } },
+          { "name": "old_filter", "in": "query", "schema": { "type": "string" } }
+        ]
+      }
+    },
+    "/v1/charges/{id}": {
+      "delete": {
+        "operationId": "deleteCharge",
+        "parameters": []
+      }
+    }
+  }
+}

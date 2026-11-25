@@ -4,9 +4,17 @@ export interface OpenApiInput {
   openapi?: string;
   info?: { version?: string };
   components?: {
-    schemas?: Record<string, Record<string, unknown>>;
+    schemas?: Record<string, OpenApiSchema>;
   };
   paths?: Record<string, Record<string, unknown>>;
+}
+
+export interface OpenApiSchema {
+  type?: string | string[];
+  properties?: Record<string, OpenApiSchema>;
+  items?: OpenApiSchema;
+  enum?: unknown[];
+  $ref?: string;
 }
 
 export interface FieldSnapshot {
