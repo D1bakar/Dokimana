@@ -27,6 +27,12 @@ program
   .requiredOption('--new-version <version>', 'New provider version')
   .option('--json <file>', 'Write machine-readable impact report')
   .option('--markdown <file>', 'Write Markdown evidence report')
+  .option(
+    '--fail-on-changes <boolean>',
+    'Exit with code 1 when structural changes are found',
+    parseBoolean,
+    false,
+  )
   .action(async (options) => {
     const oldDocument = JSON.parse(await readFile(resolve(options.old), 'utf8')) as OpenApiInput;
     const newDocument = JSON.parse(await readFile(resolve(options.new), 'utf8')) as OpenApiInput;
@@ -51,6 +57,10 @@ program
     console.log(
       `Found ${changes.length} structured changes and ${impact.findings.length} impact findings.`,
     );
+    if (options.failOnChanges && changes.length > 0) {
+      console.error(`Failing scan because ${changes.length} structural change(s) were found.`);
+      process.exitCode = 1;
+    }
   });
 
 program
@@ -104,3 +114,9 @@ program.parseAsync(process.argv).catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });
+
+function parseBoolean(value: string): boolean {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  throw new Error(`Expected "true" or "false", received "${value}".`);
+}

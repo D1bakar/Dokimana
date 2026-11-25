@@ -22,7 +22,9 @@ npm run dev -- scan \
   --new fixtures/stripe-new.json \
   --old-version 2024-12-18 \
   --new-version 2025-01-01 \
-  --json impact.json
+  --json impact.json \
+  --markdown apiproof-evidence.md \
+  --fail-on-changes true
 ```
 
 Create evidence from an impact report:
@@ -101,7 +103,7 @@ Run measured benchmarks only with reviewed public fixtures and explicit ground t
 
 ## GitHub Action
 
-The Docker Action runs `scan` against workspace-relative OpenAPI inputs and writes an impact JSON file and a Markdown evidence report to the workspace. Its required inputs are `old-openapi`, `new-openapi`, `old-version`, and `new-version`; `repo`, `impact-output`, and `report-output` are optional. The example workflow invokes the local action and uploads both reports as a short-retention artifact. Use reviewed, pinned OpenAPI inputs; the example fixtures are synthetic and are not Stripe release baselines.
+The Docker Action runs `scan` against workspace-relative OpenAPI inputs and writes an impact JSON file and a Markdown evidence report to the workspace. Its required inputs are `old-openapi`, `new-openapi`, `old-version`, and `new-version`; `repo`, `impact-output`, `report-output`, and `fail-on-changes` are optional. The Action defaults to failing when changes are found, but writes both reports before returning a failing exit code. The example workflow disables the gate because its fixtures are synthetic, then uploads both reports as a short-retention artifact. Use reviewed, pinned OpenAPI inputs; those fixtures are not Stripe release baselines.
 
 ## 30-day delivery map
 

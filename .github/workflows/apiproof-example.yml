@@ -24,8 +24,10 @@ jobs:
           new-version: fixture-new
           impact-output: apiproof-impact.json
           report-output: apiproof-evidence.md
+          fail-on-changes: false
       - name: Upload impact report
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: apiproof-evidence
           path: |

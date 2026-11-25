@@ -25,6 +25,10 @@ inputs:
     description: Markdown evidence report path, relative to the workspace; its parent directory must exist
     required: false
     default: apiproof-evidence.md
+  fail-on-changes:
+    description: Fail the Action after writing reports when one or more structural changes are found
+    required: false
+    default: 'true'
 runs:
   using: docker
   image: Dockerfile
@@ -44,6 +48,8 @@ runs:
     - /github/workspace/${{ inputs.impact-output }}
     - --markdown
     - /github/workspace/${{ inputs.report-output }}
+    - --fail-on-changes
+    - ${{ inputs.fail-on-changes }}
 branding:
   icon: shield
   color: purple
