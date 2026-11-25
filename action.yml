@@ -21,6 +21,10 @@ inputs:
     description: Impact JSON output path, relative to the workspace; its parent directory must exist
     required: false
     default: apiproof-impact.json
+  report-output:
+    description: Markdown evidence report path, relative to the workspace; its parent directory must exist
+    required: false
+    default: apiproof-evidence.md
 runs:
   using: docker
   image: Dockerfile
@@ -38,6 +42,8 @@ runs:
     - ${{ inputs.new-version }}
     - --json
     - /github/workspace/${{ inputs.impact-output }}
+    - --markdown
+    - /github/workspace/${{ inputs.report-output }}
 branding:
   icon: shield
   color: purple

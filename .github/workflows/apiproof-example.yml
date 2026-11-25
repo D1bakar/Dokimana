@@ -23,10 +23,13 @@ jobs:
           old-version: fixture-old
           new-version: fixture-new
           impact-output: apiproof-impact.json
+          report-output: apiproof-evidence.md
       - name: Upload impact report
         uses: actions/upload-artifact@v4
         with:
-          name: apiproof-impact
-          path: apiproof-impact.json
+          name: apiproof-evidence
+          path: |
+            apiproof-impact.json
+            apiproof-evidence.md
           if-no-files-found: error
           retention-days: 7

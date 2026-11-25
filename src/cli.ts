@@ -26,17 +26,28 @@ program
   .requiredOption('--old-version <version>', 'Old provider version')
   .requiredOption('--new-version <version>', 'New provider version')
   .option('--json <file>', 'Write machine-readable impact report')
+  .option('--markdown <file>', 'Write Markdown evidence report')
   .action(async (options) => {
-    const oldDocument = JSON.parse(await readFile(resolve(options.old), 'utf8')) as object;
-    const newDocument = JSON.parse(await readFile(resolve(options.new), 'utf8')) as object;
+    const oldDocument = JSON.parse(await readFile(resolve(options.old), 'utf8')) as OpenApiInput;
+    const newDocument = JSON.parse(await readFile(resolve(options.new), 'utf8')) as OpenApiInput;
     const changes = new ChangeDetector().diff({
-      oldDocument: oldDocument as OpenApiInput,
-      newDocument: newDocument as OpenApiInput,
+      oldDocument,
+      newDocument,
       oldVersion: options.oldVersion,
       newVersion: options.newVersion,
     });
     const impact = await new RepoScanner().scan(resolve(options.repo), changes);
     if (options.json) await writeFile(resolve(options.json), JSON.stringify(impact, null, 2));
+    if (options.markdown) {
+      const evidence = buildEvidenceReport({
+        repository: resolve(options.repo),
+        providerVersion: newDocument.info?.version ?? options.newVersion,
+        impact,
+        patches: [],
+        verification: [],
+      });
+      await writeFile(resolve(options.markdown), renderMarkdownReport(evidence));
+    }
     console.log(
       `Found ${changes.length} structured changes and ${impact.findings.length} impact findings.`,
     );
