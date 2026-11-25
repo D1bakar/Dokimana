@@ -1,0 +1,19 @@
+name: ApiProof
+description: Detect Stripe breaking changes and report call-site impact
+runs:
+  using: docker
+  image: Dockerfile
+branding:
+  icon: shield
+  color: purple
+inputs:
+  repo:
+    description: Repository root
+    required: false
+    default: .
+  old-openapi:
+    description: Old structured OpenAPI JSON
+    required: true
+  new-openapi:
+    description: New structured OpenAPI JSON
+    required: true

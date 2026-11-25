@@ -1,0 +1,41 @@
+{
+  "name": "apiproof",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CLI-first Stripe breaking-change detection and verification",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "apiproof": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write \"**/*.{ts,json,yml,yaml,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,json,yml,yaml,md}\"",
+    "benchmark": "tsx benchmarks/run.ts"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "ts-morph": "^24.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.16.0",
+    "@types/node": "^22.10.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "eslint": "^9.16.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

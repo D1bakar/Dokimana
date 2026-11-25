@@ -1,0 +1,14 @@
+{
+  "openapi": "3.1.0",
+  "info": { "version": "old" },
+  "components": {
+    "schemas": {
+      "Customer": {
+        "properties": {
+          "id": { "type": "string" },
+          "legacy_name": { "type": "string" }
+        }
+      }
+    }
+  }
+}

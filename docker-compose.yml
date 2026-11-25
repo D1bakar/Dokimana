@@ -1,0 +1,12 @@
+services:
+  apiproof:
+    build: .
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - .:/workspace:ro
+    working_dir: /workspace
+    environment:
+      STRIPE_SECRET_KEY: '${STRIPE_SECRET_KEY:-}'
