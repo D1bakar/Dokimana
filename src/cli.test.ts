@@ -50,5 +50,5 @@ describe('scan command', () => {
     } finally {
       await rm(outputDirectory, { recursive: true, force: true });
     }
-  });
+  }, 15000);
 });

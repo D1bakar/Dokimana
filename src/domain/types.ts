@@ -12,6 +12,7 @@ export type ChangeKind =
   | 'field_removed'
   | 'field_renamed'
   | 'field_type_changed'
+  | 'field_became_required'
   | 'schema_removed'
   | 'parameter_removed'
   | 'parameter_renamed'

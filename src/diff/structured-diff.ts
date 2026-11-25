@@ -12,6 +12,7 @@ export interface OpenApiInput {
 export interface OpenApiSchema {
   type?: string | string[];
   properties?: Record<string, OpenApiSchema>;
+  required?: string[];
   items?: OpenApiSchema;
   enum?: unknown[];
   $ref?: string;

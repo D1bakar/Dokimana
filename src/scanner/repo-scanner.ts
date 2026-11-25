@@ -29,6 +29,7 @@ const FIELD_LEVEL_KINDS: ReadonlySet<ChangeKind> = new Set<ChangeKind>([
   'field_removed',
   'field_renamed',
   'field_type_changed',
+  'field_became_required',
   'enum_value_removed',
 ]);
 const INLINE_STRIPE_CLIENT = '<inline-stripe-client>';

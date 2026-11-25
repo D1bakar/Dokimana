@@ -20,6 +20,7 @@ export interface ChangeDetectorInput {
 
 interface SchemaField {
   type: string;
+  required: boolean;
   enumValues?: unknown[];
 }
 
@@ -66,9 +67,14 @@ function schemaFields(schema: OpenApiSchema, document: OpenApiInput): Map<string
     resolvingReferences: Set<string>,
   ): void => {
     for (const [name, property] of Object.entries(current.properties ?? {})) {
-      visit(property, prefix ? `${prefix}.${name}` : name, resolvingReferences);
+      visit(
+        property,
+        prefix ? `${prefix}.${name}` : name,
+        current.required?.includes(name) ?? false,
+        resolvingReferences,
+      );
     }
-    if (current.items) visit(current.items, `${prefix}[]`, resolvingReferences);
+    if (current.items) visit(current.items, `${prefix}[]`, false, resolvingReferences);
 
     if (current.$ref && !resolvingReferences.has(current.$ref)) {
       const referencedSchema = resolveSchemaReference(current.$ref, document);
@@ -80,6 +86,7 @@ function schemaFields(schema: OpenApiSchema, document: OpenApiInput): Map<string
   const visit = (
     current: OpenApiSchema,
     prefix: string,
+    required: boolean,
     resolvingReferences: Set<string>,
   ): void => {
     const type =
@@ -96,7 +103,9 @@ function schemaFields(schema: OpenApiSchema, document: OpenApiInput): Map<string
                 : 'unknown';
 
     if (prefix) {
-      const field = current.enum ? { type, enumValues: current.enum } : { type };
+      const field = current.enum
+        ? { type, required, enumValues: current.enum }
+        : { type, required };
       fields.set(prefix, field);
     }
 
@@ -114,7 +123,9 @@ function openApiSchemaFields(
     return new Map(
       value.map((snapshot) => [
         snapshot.resource,
-        new Map(Object.entries(snapshot.fields).map(([path, type]) => [path, { type }])),
+        new Map(
+          Object.entries(snapshot.fields).map(([path, type]) => [path, { type, required: false }]),
+        ),
       ]),
     );
   }
@@ -253,6 +264,19 @@ export class ChangeDetector {
               path,
               oldField.type,
               newField.type,
+              source,
+            ),
+          );
+        }
+
+        if (!oldField.required && newField.required) {
+          records.push(
+            this.makeRecord(
+              resource,
+              'field_became_required',
+              path,
+              'optional',
+              'required',
               source,
             ),
           );

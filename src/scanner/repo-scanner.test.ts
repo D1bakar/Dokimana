@@ -39,6 +39,14 @@ describe('RepoScanner', () => {
     expect(report.findings[0]?.confidence).toBe('high');
   });
 
+  it('maps newly required fields to call sites instead of treating them as resource-level', async () => {
+    const report = await scanFixture('positive', [change('legacy_name', 'field_became_required')]);
+    expect(report.findings).toHaveLength(1);
+    expect(report.unverifiedCallSiteCoverage.some((note) => note.includes('resource-level'))).toBe(
+      false,
+    );
+  });
+
   it('does not match non-Stripe clients or substring keys', async () => {
     const report = await scanFixture('negative', [change('legacy_name')]);
     expect(report.findings).toHaveLength(0);
