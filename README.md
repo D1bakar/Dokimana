@@ -43,7 +43,7 @@ npm run dev -- report \
   - Only calls on statically identifiable Stripe client instances (`new Stripe(...)`, including `require('stripe')`) are matched. Object-literal keys are compared exactly, including nested paths and array-item paths such as `items[].field`. Local object literals assigned to a variable are resolved at medium confidence. Dynamic arguments, spreads, and computed keys are reported as unverified rather than guessed.
   - `node_modules`, `dist`, `build`, `coverage`, `vendor`, `out`, `.git`, and `.next` are skipped.
 - `verify` - validates environment safety and defines the intended container execution boundary. It does not start live network access.
-- `report` - produces terminal and Markdown evidence reports.
+- `report` - produces terminal and Markdown evidence reports, including the structured changes, call-site findings, patches, verification status, and explicit coverage limitations.
 - `doctor` - refuses live Stripe keys and reports test-key status.
 
 ## Safety model

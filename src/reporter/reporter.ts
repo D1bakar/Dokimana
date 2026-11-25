@@ -1,48 +1,101 @@
 import type { EvidenceReport, ImpactReport, Patch, VerificationResult } from '../domain/types.js';
 
+function terminalText(value: string): string {
+  return [...value]
+    .map((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint < 32 || (codePoint >= 127 && codePoint <= 159) ? ' ' : character;
+    })
+    .join('');
+}
+
 export function renderTerminalReport(report: EvidenceReport): string {
   const lines = [
     `ApiProof Evidence Report`,
-    `Repository: ${report.repository}`,
-    `Provider version: ${report.providerVersion}`,
+    `Repository: ${terminalText(report.repository)}`,
+    `Provider version: ${terminalText(report.providerVersion)}`,
     `Impact coverage: ${report.impactCoverage}`,
     `Changes: ${report.changes.length}`,
     `Affected call sites: ${report.findings.length}`,
     `Ready patches: ${report.patches.filter((patch) => patch.status === 'ready').length}`,
     `Needs-human patches: ${report.patches.filter((patch) => patch.status === 'needs_human').length}`,
+    'Structured changes:',
   ];
-  for (const result of report.verification) {
-    lines.push(`Verification ${result.scenarioId}: ${result.classification}`);
+  if (report.changes.length === 0) lines.push('  None');
+  for (const change of report.changes) {
+    lines.push(
+      `  - ${terminalText(change.kind)} ${terminalText(change.resource)}${change.path ? `.${terminalText(change.path)}` : ''}: ${terminalText(change.oldValue)} -> ${terminalText(change.newValue ?? 'removed')}`,
+    );
   }
-  for (const limitation of report.limitations) lines.push(`Limitation: ${limitation}`);
+  for (const result of report.verification) {
+    lines.push(`Verification ${terminalText(result.scenarioId)}: ${result.classification}`);
+  }
+  for (const limitation of report.limitations) {
+    lines.push(`Limitation: ${terminalText(limitation)}`);
+  }
   return lines.join('\n');
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function inlineCode(value: string): string {
+  const singleLine = value.replace(/\r\n?|\n/g, ' ');
+  return `<code>${escapeHtml(singleLine).replaceAll('|', '&#124;')}</code>`;
+}
+
+function markdownText(value: string): string {
+  return escapeHtml(value)
+    .split(/\r\n?|\n/)
+    .map((line) => line.replace(/([\\`*_{}[\]()#+.!|>~-])/g, '\\$1'))
+    .join('<br>');
 }
 
 export function renderMarkdownReport(report: EvidenceReport): string {
   const lines = [
     '# ApiProof Breaking-Change Evidence',
     '',
-    `- **Repository:** ${report.repository}`,
-    `- **Provider version:** ${report.providerVersion}`,
+    `- **Repository:** ${inlineCode(report.repository)}`,
+    `- **Provider version:** ${inlineCode(report.providerVersion)}`,
     `- **Impact coverage:** **${report.impactCoverage}**`,
-    `- **Generated:** ${report.generatedAt}`,
+    `- **Generated:** ${inlineCode(report.generatedAt)}`,
     '',
-    '## Call-Site Findings',
+    '## Structured Changes',
     '',
   ];
+  if (report.changes.length === 0) lines.push('_No structured changes found._');
+  else {
+    lines.push('| Change | Resource | Path | Old value | New value | Evidence |');
+    lines.push('| --- | --- | --- | --- | --- | --- |');
+    for (const change of report.changes) {
+      lines.push(
+        `| ${inlineCode(change.kind)} | ${inlineCode(change.resource)} | ${inlineCode(change.path ?? '—')} | ${inlineCode(change.oldValue)} | ${inlineCode(change.newValue ?? '—')} | ${inlineCode(change.evidence)} |`,
+      );
+    }
+  }
+
+  lines.push('', '## Call-Site Findings', '');
   if (report.findings.length === 0) lines.push('_No impacted call sites found._');
   for (const finding of report.findings) {
     lines.push(
-      `- ${finding.callSite.file}:${finding.callSite.line} — ${finding.reason} (${finding.confidence})`,
+      `- ${inlineCode(`${finding.callSite.file}:${finding.callSite.line}:${finding.callSite.column}`)} — ${markdownText(finding.reason)} (${finding.confidence})`,
     );
   }
 
   lines.push('', '## Patches', '');
   if (report.patches.length === 0) lines.push('_No patches generated._');
   for (const patch of report.patches) {
-    lines.push(`### ${patch.status === 'ready' ? 'Ready' : 'Needs human'}: ${patch.id}`);
+    lines.push(
+      `### ${patch.status === 'ready' ? 'Ready' : 'Needs human'}: ${inlineCode(patch.id)}`,
+    );
     lines.push('');
-    lines.push(patch.explanation);
+    lines.push(markdownText(patch.explanation));
   }
 
   lines.push('', '## Verification', '');
@@ -51,12 +104,12 @@ export function renderMarkdownReport(report: EvidenceReport): string {
   }
   for (const verification of report.verification) {
     lines.push(
-      `- **${verification.scenarioId}:** ${verification.classification} — ${verification.reason}`,
+      `- **${inlineCode(verification.scenarioId)}:** ${verification.classification} — ${markdownText(verification.reason)}`,
     );
   }
 
   lines.push('', '## Coverage and Limitations', '');
-  for (const limitation of report.limitations) lines.push(`- ${limitation}`);
+  for (const limitation of report.limitations) lines.push(`- ${markdownText(limitation)}`);
   return `${lines.join('\n')}\n`;
 }
 
