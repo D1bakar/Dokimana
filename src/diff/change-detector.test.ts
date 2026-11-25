@@ -66,6 +66,115 @@ describe('ChangeDetector', () => {
     expect(changes).toHaveLength(7);
   });
 
+  it('detects parameters becoming required and changing schema type', async () => {
+    const oldDocument = JSON.parse(
+      await readFile(resolve('src/diff/fixtures/parameter-changes-old.json'), 'utf8'),
+    ) as OpenApiInput;
+    const newDocument = JSON.parse(
+      await readFile(resolve('src/diff/fixtures/parameter-changes-new.json'), 'utf8'),
+    ) as OpenApiInput;
+
+    const changes = new ChangeDetector().diff({
+      oldDocument,
+      newDocument,
+      oldVersion: '2025-01-01',
+      newVersion: '2025-02-01',
+    });
+
+    expect(
+      changes.map(({ kind, resource, path, oldValue, newValue }) => [
+        kind,
+        resource,
+        path,
+        oldValue,
+        newValue,
+      ]),
+    ).toEqual(
+      expect.arrayContaining([
+        [
+          'parameter_became_required',
+          'get /v1/customers/{id}',
+          'query.limit',
+          'optional',
+          'required',
+        ],
+        ['parameter_type_changed', 'get /v1/customers/{id}', 'query.limit', 'integer', 'string'],
+      ]),
+    );
+    expect(changes).toHaveLength(2);
+  });
+
+  it('detects removed parameter enum values without flagging removed constraints', async () => {
+    const oldDocument = JSON.parse(
+      await readFile(resolve('src/diff/fixtures/parameter-enum-old.json'), 'utf8'),
+    ) as OpenApiInput;
+    const newDocument = JSON.parse(
+      await readFile(resolve('src/diff/fixtures/parameter-enum-new.json'), 'utf8'),
+    ) as OpenApiInput;
+
+    const changes = new ChangeDetector().diff({
+      oldDocument,
+      newDocument,
+      oldVersion: '2025-01-01',
+      newVersion: '2025-02-01',
+    });
+
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({
+      kind: 'parameter_enum_value_removed',
+      resource: 'get /v1/customers',
+      path: 'query.include',
+      oldValue: 'full',
+    });
+  });
+
+  it('resolves local component schema references when comparing nested fields', async () => {
+    const oldDocument = JSON.parse(
+      await readFile(resolve('src/diff/fixtures/referenced-old.json'), 'utf8'),
+    ) as OpenApiInput;
+    const newDocument = JSON.parse(
+      await readFile(resolve('src/diff/fixtures/referenced-new.json'), 'utf8'),
+    ) as OpenApiInput;
+
+    const changes = new ChangeDetector().diff({
+      oldDocument,
+      newDocument,
+      oldVersion: '2025-01-01',
+      newVersion: '2025-02-01',
+    });
+
+    expect(changes.map(({ kind, resource, path }) => [kind, resource, path])).toEqual(
+      expect.arrayContaining([
+        ['field_removed', 'Address', 'legacy_code'],
+        ['field_removed', 'Customer', 'billing_address.legacy_code'],
+      ]),
+    );
+    expect(changes).toHaveLength(2);
+  });
+
+  it('terminates when local schema references are recursive', () => {
+    const recursiveDocument: OpenApiInput = {
+      components: {
+        schemas: {
+          Node: {
+            properties: {
+              parent: { $ref: '#/components/schemas/Node' },
+            },
+          },
+        },
+      },
+    };
+
+    expect(() =>
+      new ChangeDetector().diff({
+        oldDocument: recursiveDocument,
+        newDocument: recursiveDocument,
+        oldVersion: 'old',
+        newVersion: 'new',
+      }),
+    ).not.toThrow();
+  });
+
   it('reports a removed schema as a schema change rather than an endpoint removal', () => {
     const changes = new ChangeDetector().diff({
       oldDocument: {

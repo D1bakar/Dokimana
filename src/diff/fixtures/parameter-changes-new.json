@@ -1,0 +1,26 @@
+{
+  "openapi": "3.1.0",
+  "info": { "version": "2025-02-01" },
+  "paths": {
+    "/v1/customers/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string" }
+        }
+      ],
+      "get": {
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ]
+      }
+    }
+  }
+}

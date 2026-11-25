@@ -15,6 +15,9 @@ export type ChangeKind =
   | 'schema_removed'
   | 'parameter_removed'
   | 'parameter_renamed'
+  | 'parameter_became_required'
+  | 'parameter_type_changed'
+  | 'parameter_enum_value_removed'
   | 'endpoint_removed'
   | 'enum_value_removed';
 

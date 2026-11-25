@@ -26,7 +26,14 @@ interface SchemaField {
 interface OpenApiOperation {
   route: string;
   method: string;
-  parameters: Map<string, string>;
+  parameters: Map<string, OpenApiParameter>;
+}
+
+interface OpenApiParameter {
+  serialized: string;
+  required: boolean;
+  schemaType?: string;
+  enumValues?: unknown[];
 }
 
 function checksum(value: unknown): string {
@@ -37,9 +44,44 @@ function isOpenApi(value: OpenApiInput | FieldSnapshot[]): value is OpenApiInput
   return !Array.isArray(value);
 }
 
-function schemaFields(schema: OpenApiSchema): Map<string, SchemaField> {
+function resolveSchemaReference(
+  reference: string,
+  document: OpenApiInput,
+): OpenApiSchema | undefined {
+  const prefix = '#/components/schemas/';
+  if (!reference.startsWith(prefix)) return undefined;
+
+  const path = reference.slice(prefix.length).split('/');
+  if (path.length !== 1) return undefined;
+
+  const name = path[0]?.replace(/~1/g, '/').replace(/~0/g, '~');
+  return name ? document.components?.schemas?.[name] : undefined;
+}
+
+function schemaFields(schema: OpenApiSchema, document: OpenApiInput): Map<string, SchemaField> {
   const fields = new Map<string, SchemaField>();
-  const visit = (current: OpenApiSchema, prefix: string): void => {
+  const visitChildren = (
+    current: OpenApiSchema,
+    prefix: string,
+    resolvingReferences: Set<string>,
+  ): void => {
+    for (const [name, property] of Object.entries(current.properties ?? {})) {
+      visit(property, prefix ? `${prefix}.${name}` : name, resolvingReferences);
+    }
+    if (current.items) visit(current.items, `${prefix}[]`, resolvingReferences);
+
+    if (current.$ref && !resolvingReferences.has(current.$ref)) {
+      const referencedSchema = resolveSchemaReference(current.$ref, document);
+      if (referencedSchema) {
+        visitChildren(referencedSchema, prefix, new Set([...resolvingReferences, current.$ref]));
+      }
+    }
+  };
+  const visit = (
+    current: OpenApiSchema,
+    prefix: string,
+    resolvingReferences: Set<string>,
+  ): void => {
     const type =
       typeof current.type === 'string'
         ? current.type
@@ -58,15 +100,10 @@ function schemaFields(schema: OpenApiSchema): Map<string, SchemaField> {
       fields.set(prefix, field);
     }
 
-    for (const [name, property] of Object.entries(current.properties ?? {})) {
-      visit(property, prefix ? `${prefix}.${name}` : name);
-    }
-    if (current.items) visit(current.items, `${prefix}[]`);
+    visitChildren(current, prefix, resolvingReferences);
   };
 
-  for (const [name, property] of Object.entries(schema.properties ?? {})) {
-    visit(property, name);
-  }
+  visitChildren(schema, '', new Set());
   return fields;
 }
 
@@ -85,7 +122,7 @@ function openApiSchemaFields(
   return new Map(
     Object.entries(value.components?.schemas ?? {}).map(([resource, schema]) => [
       resource,
-      schemaFields(schema),
+      schemaFields(schema, value),
     ]),
   );
 }
@@ -130,8 +167,8 @@ function operationEntries(document: OpenApiInput): OpenApiOperation[] {
   );
 }
 
-function parameterMap(...operations: Record<string, unknown>[]): Map<string, string> {
-  const result = new Map<string, string>();
+function parameterMap(...operations: Record<string, unknown>[]): Map<string, OpenApiParameter> {
+  const result = new Map<string, OpenApiParameter>();
   for (const operation of operations) {
     const parameters = Array.isArray(operation.parameters) ? operation.parameters : [];
     for (const parameter of parameters) {
@@ -143,7 +180,21 @@ function parameterMap(...operations: Record<string, unknown>[]): Map<string, str
         continue;
       }
       const path = `${parameter.in}.${parameter.name}`;
-      result.set(path, serializeValue(parameter));
+      const schema = isRecord(parameter.schema) ? parameter.schema : undefined;
+      const schemaType =
+        typeof schema?.type === 'string'
+          ? schema.type
+          : Array.isArray(schema?.type) && schema.type.every((type) => typeof type === 'string')
+            ? [...schema.type].sort().join('|')
+            : undefined;
+      const enumValues = Array.isArray(schema?.enum) ? schema.enum : undefined;
+      const details: OpenApiParameter = {
+        serialized: serializeValue(parameter),
+        required: parameter.in === 'path' || parameter.required === true,
+        ...(schemaType === undefined ? {} : { schemaType }),
+        ...(enumValues === undefined ? {} : { enumValues }),
+      };
+      result.set(path, details);
     }
   }
   return result;
@@ -244,17 +295,67 @@ export class ChangeDetector {
 
         const nextParameters = newOperation.parameters;
         for (const [parameterPath, oldParameter] of oldParameters) {
-          if (!nextParameters.has(parameterPath)) {
+          const nextParameter = nextParameters.get(parameterPath);
+          if (!nextParameter) {
             records.push(
               this.makeRecord(
                 operationId,
                 'parameter_removed',
                 parameterPath,
-                oldParameter,
+                oldParameter.serialized,
                 undefined,
                 source,
               ),
             );
+            continue;
+          }
+
+          if (!oldParameter.required && nextParameter.required) {
+            records.push(
+              this.makeRecord(
+                operationId,
+                'parameter_became_required',
+                parameterPath,
+                'optional',
+                'required',
+                source,
+              ),
+            );
+          }
+
+          if (
+            oldParameter.schemaType !== undefined &&
+            nextParameter.schemaType !== undefined &&
+            oldParameter.schemaType !== nextParameter.schemaType
+          ) {
+            records.push(
+              this.makeRecord(
+                operationId,
+                'parameter_type_changed',
+                parameterPath,
+                oldParameter.schemaType,
+                nextParameter.schemaType,
+                source,
+              ),
+            );
+          }
+
+          if (oldParameter.enumValues && nextParameter.enumValues) {
+            const nextValues = new Set(nextParameter.enumValues.map(serializeValue));
+            for (const value of oldParameter.enumValues) {
+              if (!nextValues.has(serializeValue(value))) {
+                records.push(
+                  this.makeRecord(
+                    operationId,
+                    'parameter_enum_value_removed',
+                    parameterPath,
+                    serializeValue(value),
+                    undefined,
+                    source,
+                  ),
+                );
+              }
+            }
           }
         }
       }
