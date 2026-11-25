@@ -11,6 +11,9 @@ import {
 } from './reporter/reporter.js';
 import { assertSafeTestModeKeys, validateStripeKey } from './verifier/key-safety.js';
 import type { OpenApiInput } from './diff/structured-diff.js';
+import type { Scenario } from './domain/types.js';
+import { DockerNotConfiguredRunner } from './verifier/container-runner.js';
+import { Verifier } from './verifier/verifier.js';
 
 const program = new Command();
 program
@@ -65,15 +68,30 @@ program
 
 program
   .command('verify')
-  .description('Verify scenarios through injectable execution ports')
+  .description('Validate a scenario and report isolated execution status')
   .requiredOption('-r, --repo <path>', 'Repository root')
   .option('--scenario <file>', 'Scenario JSON file')
-  .action(async () => {
+  .option('--json <file>', 'Write the verification result as JSON')
+  .action(async (options) => {
     assertSafeTestModeKeys(process.env);
-    console.log('Key safety check passed. No live Stripe key is present.');
+    if (!options.scenario) {
+      throw new Error('Provide --scenario to verify; use doctor for a key-safety check.');
+    }
+
+    const scenario = parseScenario(JSON.parse(await readFile(resolve(options.scenario), 'utf8')));
+    const result = await new Verifier(
+      new DockerNotConfiguredRunner(),
+      resolve(options.repo),
+    ).verify(scenario, process.env);
+    if (options.json) await writeFile(resolve(options.json), JSON.stringify(result, null, 2));
     console.log(
-      'Execution is not started: configure a container runner implementation before verify.',
+      JSON.stringify({
+        scenarioId: result.scenarioId,
+        classification: result.classification,
+        reason: result.reason,
+      }),
     );
+    if (result.classification === 'could_not_run') process.exitCode = 1;
   });
 
 program
@@ -119,4 +137,39 @@ function parseBoolean(value: string): boolean {
   if (value === 'true') return true;
   if (value === 'false') return false;
   throw new Error(`Expected "true" or "false", received "${value}".`);
+}
+
+function parseScenario(value: unknown): Scenario {
+  if (!isRecord(value)) throw new Error('Scenario must be a JSON object.');
+  const id = readScenarioString(value, 'id');
+  const name = readScenarioString(value, 'name');
+  const description = readScenarioString(value, 'description');
+  const apiVersion = readScenarioString(value, 'apiVersion');
+  const operation = readScenarioString(value, 'operation');
+  if (!isRecord(value.input)) throw new Error('Scenario field "input" must be a JSON object.');
+  if (value.expectedOutput !== undefined && !isRecord(value.expectedOutput)) {
+    throw new Error('Scenario field "expectedOutput" must be a JSON object when provided.');
+  }
+
+  return {
+    id,
+    name,
+    description,
+    apiVersion,
+    operation,
+    input: value.input,
+    ...(value.expectedOutput === undefined ? {} : { expectedOutput: value.expectedOutput }),
+  };
+}
+
+function readScenarioString(value: Record<string, unknown>, field: string): string {
+  const entry = value[field];
+  if (typeof entry !== 'string' || entry.length === 0) {
+    throw new Error(`Scenario field "${field}" must be a non-empty string.`);
+  }
+  return entry;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

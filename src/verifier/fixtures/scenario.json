@@ -1,0 +1,10 @@
+{
+  "id": "customer-read",
+  "name": "Customer read",
+  "description": "Compare customer lookup behavior using a synthetic identifier.",
+  "apiVersion": "2025-01-01",
+  "operation": "customers.retrieve",
+  "input": {
+    "id": "cus_fixture"
+  }
+}
