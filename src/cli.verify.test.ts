@@ -9,7 +9,7 @@ const scenarioPath = resolve('src/verifier/fixtures/scenario.json');
 
 describe('verify command', () => {
   it('writes an explicit could_not_run result instead of claiming verification', async () => {
-    const outputDirectory = await mkdtemp(join(tmpdir(), 'apiproof-verify-'));
+    const outputDirectory = await mkdtemp(join(tmpdir(), 'dokimana-verify-'));
     const resultPath = join(outputDirectory, 'verification.json');
 
     try {
@@ -53,7 +53,7 @@ describe('verify command', () => {
   }, 15000);
 
   it('refuses live keys before writing a verification result', async () => {
-    const outputDirectory = await mkdtemp(join(tmpdir(), 'apiproof-verify-'));
+    const outputDirectory = await mkdtemp(join(tmpdir(), 'dokimana-verify-'));
     const resultPath = join(outputDirectory, 'verification.json');
     const fakeLiveKey = 'sk_live_synthetic_test_value';
 

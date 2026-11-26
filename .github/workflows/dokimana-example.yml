@@ -1,4 +1,4 @@
-name: ApiProof
+name: Dokimana
 
 on:
   pull_request:
@@ -22,16 +22,16 @@ jobs:
           new-openapi: fixtures/stripe-new.json
           old-version: fixture-old
           new-version: fixture-new
-          impact-output: apiproof-impact.json
-          report-output: apiproof-evidence.md
+          impact-output: dokimana-impact.json
+          report-output: dokimana-evidence.md
           fail-on-changes: false
       - name: Upload impact report
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: apiproof-evidence
+          name: dokimana-evidence
           path: |
-            apiproof-impact.json
-            apiproof-evidence.md
+            dokimana-impact.json
+            dokimana-evidence.md
           if-no-files-found: error
           retention-days: 7

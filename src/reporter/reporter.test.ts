@@ -42,7 +42,6 @@ describe('renderMarkdownReport', () => {
         repository: '/workspace/repo',
         providerVersion: 'fixture',
         impact: impact([change()]),
-        patches: [],
         verification: [],
       }),
     );
@@ -63,7 +62,6 @@ describe('renderMarkdownReport', () => {
         repository: '/workspace/repo',
         providerVersion: 'fixture',
         impact: impact([]),
-        patches: [],
         verification: [],
       }),
     );
@@ -79,7 +77,6 @@ describe('renderTerminalReport', () => {
         repository: '/workspace/repo',
         providerVersion: 'fixture',
         impact: impact([change({ resource: 'Customer\u001b[31m' })]),
-        patches: [],
         verification: [],
       }),
     );

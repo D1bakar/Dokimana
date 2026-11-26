@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('scan command', () => {
   it('writes JSON impact data and a Markdown evidence report', async () => {
-    const outputDirectory = await mkdtemp(join(tmpdir(), 'apiproof-scan-'));
+    const outputDirectory = await mkdtemp(join(tmpdir(), 'dokimana-scan-'));
     const impactFile = join(outputDirectory, 'impact.json');
     const reportFile = join(outputDirectory, 'evidence.md');
 
@@ -47,7 +47,7 @@ describe('scan command', () => {
       expect(impact.findings.length).toBeGreaterThan(0);
 
       const report = await readFile(reportFile, 'utf8');
-      expect(report).toContain('# ApiProof Breaking-Change Evidence');
+      expect(report).toContain('# Dokimana Breaking-Change Evidence');
       expect(report).toContain('## Call-Site Findings');
       expect(report).toContain('No scenarios ran. Verification is unverified.');
 
