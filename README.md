@@ -27,6 +27,18 @@ AST results are evidence, not proof of runtime behavior. A scan that finds no im
 
 The CLI coordinates modules under `src/`: `diff` compares structured documents, `scanner` inspects source syntax, `fixes` contains constrained proposal logic, `verifier` defines key-safety and execution boundaries, and `reporter` formats evidence. Provider retrieval and repository execution are represented by interfaces; they are not implemented as live network fetching or host execution.
 
+## Website
+
+The public site in [`site/`](site/) is a Next.js App Router app that documents the CLI, its safety boundaries, the command reference, and the quick start. It is optional for using the CLI.
+
+```bash
+cd site
+npm ci
+npm run dev
+```
+
+Run `npm run lint`, `npm run type-check`, `npm test`, and `npm run build` in `site/` before shipping changes. See [`site/README.md`](site/README.md) for routes and content rules.
+
 ## Requirements and setup
 
 - Node.js 20 or newer
@@ -123,7 +135,7 @@ npm run lint
 npm run format:check
 ```
 
-Tests use local fixtures; no Stripe credentials or external API calls are required. Before contributing, read [`agent.md`](agent.md), [`AGENTS.md`](AGENTS.md), and [`HOW_TO_USE_GIT_GITHUB.md`](HOW_TO_USE_GIT_GITHUB.md). Research briefs and their sources are indexed in [`research/`](research/README.md).
+Tests use local fixtures; no Stripe credentials or external API calls are required. Site checks live in `site/` and run separately. Before contributing, read [`agent.md`](agent.md), [`AGENTS.md`](AGENTS.md), and [`HOW_TO_USE_GIT_GITHUB.md`](HOW_TO_USE_GIT_GITHUB.md). Research briefs and their sources are indexed in [`research/`](research/README.md).
 
 ## Benchmark status
 
