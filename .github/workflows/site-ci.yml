@@ -5,11 +5,15 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      - 'README.md'
+      - 'agent.md'
       - '.github/workflows/site-ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'site/**'
+      - 'README.md'
+      - 'agent.md'
       - '.github/workflows/site-ci.yml'
 
 jobs:
@@ -17,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -35,6 +41,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '20'

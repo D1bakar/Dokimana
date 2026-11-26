@@ -1,0 +1,112 @@
+name: Release
+
+# Publishing happens only on pushes to main. Changesets opens a version PR when
+# .changeset/*.md files land on main; merging that PR creates the push that publishes.
+# There is intentionally no pull_request trigger here.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+# npm authentication must be configured in repository settings before enabling this workflow:
+# either add an NPM_TOKEN secret or configure npm trusted publishing for this repository and
+# this workflow. `npm publish --provenance` also needs the id-token permission above.
+jobs:
+  release:
+    name: Version or publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # package.json is intentionally not changed here. Keep this bootstrap until
+      # @changesets/cli is a declared devDependency, then use `npm exec -- changeset` instead.
+      - name: Ensure Changesets CLI is available
+        shell: bash
+        run: |
+          if [ ! -x node_modules/.bin/changeset ]; then
+            npm install --no-save --no-package-lock @changesets/cli@^2.27.0
+          fi
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Benchmark
+        run: npm run benchmark
+
+      # This workflow does not add npm scripts. An accuracy bench script must exist in
+      # package.json (for example `bench:accuracy`) before releases can run.
+      - name: Accuracy benchmark
+        shell: bash
+        run: |
+          script=$(node -e '
+            const scripts = require("./package.json").scripts ?? {};
+            const preferred = ["bench:accuracy", "accuracy:bench", "benchmark:accuracy", "accuracy"];
+            const match =
+              preferred.find((name) => typeof scripts[name] === "string") ??
+              Object.keys(scripts).find((name) => /accuracy/i.test(name));
+            if (!match) {
+              console.error(
+                "No accuracy benchmark script was found in package.json. Add one before enabling releases.",
+              );
+              process.exit(1);
+            }
+            process.stdout.write(match);
+          ')
+          npm run "$script"
+
+      # Changesets detects .changeset/*.md files automatically. With changesets present it
+      # opens a version PR; after that PR is merged it runs the publish script below.
+      - name: Create version PR or publish to npm
+        uses: changesets/action@v1
+        with:
+          version: npx changeset version
+          # npm publish --provenance --access public is the publish command. The wrapper skips
+          # versions already on npm (plain npm publish would fail on the next main push) and
+          # prints the "New tag:" marker that changesets/action needs to tag a root package.
+          publish: >-
+            node -e "const cp = require('node:child_process');
+            const version = require('./package.json').version;
+            try {
+              cp.execFileSync('npm', ['view', 'dokimana@' + version, 'version'], { stdio: 'ignore' });
+              console.log('dokimana@' + version + ' is already published; skipping.');
+              process.exit(0);
+            } catch {
+              cp.execFileSync('npm', ['publish', '--provenance', '--access', 'public'], { stdio: 'inherit' });
+              console.log('New tag: dokimana@' + version);
+            }"
+          commit: 'chore: version packages'
+          title: 'chore: version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

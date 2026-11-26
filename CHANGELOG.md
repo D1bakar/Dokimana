@@ -4,7 +4,26 @@ All notable changes to Dokimana are recorded here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
-No unreleased changes recorded.
+### Added
+
+- Explicit `needs_human` entries for changes with no static call-site mapping.
+- Source-scan coverage notes that state file count, extensions, and ignored directories.
+- Input validation for supplied OpenAPI documents and existing impact files.
+- Docker build exclusions and a production-only runtime dependency install.
+
+### Changed
+
+- Live Stripe key detection now covers `sk_live` and `rk_live` values before repository work.
+- Reports label impact analysis as static evidence instead of implying runtime verification.
+- `verify` no longer records an execution timestamp when nothing ran.
+- Schema enum removal follows the same constraint policy as parameter enums.
+- CI checks formatting and site CI watches root documents that site tests read.
+
+### Fixed
+
+- Inline Stripe clients now report full operations such as `customers.update`.
+- README and site commands use the real scenario fixture path.
+- Requirement declaration for scanner fixtures no longer sits in the public source types.
 
 ## [0.1.0] - 2026-11-26
 
@@ -28,3 +47,7 @@ No unreleased changes recorded.
 
 - Dead patch generation and patch reporting paths that the CLI never applied.
 - Unused prototypes, research notes, benchmarks, diagrams, and redirect page stubs.
+
+## Versioning
+
+Release and versioning policy lives in [VERSIONING.md](VERSIONING.md). Changesets drive version bumps and changelog entries; see [.changeset/README.md](.changeset/README.md).

@@ -1,0 +1,50 @@
+[
+  {
+    "name": "express-create",
+    "description": "Express router creating a customer with email, phone, metadata, and tax_exempt."
+  },
+  {
+    "name": "express-retrieve",
+    "description": "Express router retrieving a customer and reading legacy account_balance plus phone."
+  },
+  {
+    "name": "next-route-handler",
+    "description": "Next.js App Router GET handler that expands default_source and reads a typed customer balance."
+  },
+  {
+    "name": "nestjs-service",
+    "description": "NestJS service with an injected Stripe client and a create-customer wrapper method."
+  },
+  {
+    "name": "serverless-handler",
+    "description": "Serverless handler reading phone from event.data.object for customer.created events."
+  },
+  {
+    "name": "webhook-worker",
+    "description": "Webhook worker using constructEvent and switching over customer.created and customer.updated."
+  },
+  {
+    "name": "cross-file-client",
+    "description": "Stripe client exported from one module and consumed from a separate call-site module."
+  },
+  {
+    "name": "typed-model",
+    "description": "Typed Stripe.Customer and Stripe.PaymentIntent variables with changed-field reads."
+  },
+  {
+    "name": "expand-array",
+    "description": "Customer retrieve call passing an expand array of default_source and address."
+  },
+  {
+    "name": "destructured-response",
+    "description": "Retrieve result destructured into phone, balance, email, and metadata."
+  },
+  {
+    "name": "dynamic-call",
+    "description": "Bracket-notation method dispatch with spread arguments that defeat static resolution."
+  },
+  {
+    "name": "rest-fetch",
+    "description": "Direct fetch POST to /v1/customers with changed fields in a JSON body."
+  }
+]

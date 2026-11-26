@@ -1,0 +1,290 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Stripe API (fixture excerpt)",
+    "version": "2026-03-31.stripe-real-new",
+    "x-stripeSpecFilename": "spec3"
+  },
+  "servers": [
+    { "url": "https://api.stripe.com", "description": "Stripe API" }
+  ],
+  "components": {
+    "schemas": {
+      "CustomerBase": {
+        "title": "CustomerBase",
+        "type": "object",
+        "description": "Core fields shared by Customer and DeletedCustomer.",
+        "properties": {
+          "id": { "type": "string", "maxLength": 5000, "description": "Unique identifier for the object." },
+          "object": { "type": "string", "enum": ["customer"], "description": "String representing the object's type." },
+          "created": { "type": "integer", "format": "unix-time" },
+          "livemode": { "type": "boolean" }
+        },
+        "required": ["created", "id", "livemode", "object"],
+        "x-expandableFields": []
+      },
+      "Customer": {
+        "title": "Customer",
+        "description": "This object represents a customer of your business.",
+        "allOf": [
+          { "$ref": "#/components/schemas/CustomerBase" },
+          {
+            "type": "object",
+            "properties": {
+              "address": {
+                "description": "The customer's billing address.",
+                "anyOf": [{ "$ref": "#/components/schemas/Address" }],
+                "nullable": true
+              },
+              "balance": { "type": "string", "description": "The current balance, if any, stored on the customer." },
+              "default_source": {
+                "description": "ID of the default payment source for the customer.",
+                "anyOf": [
+                  { "type": ["string", "null"] },
+                  { "$ref": "#/components/schemas/Card" }
+                ],
+                "x-expansionResources": {
+                  "oneOf": [{ "$ref": "#/components/schemas/Card" }]
+                }
+              },
+              "email": { "type": ["string", "null"], "maxLength": 512, "description": "The customer's email address." },
+              "invoice_prefix": { "type": ["string", "null"], "description": "The prefix for the customer used to generate unique invoice numbers." },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": { "type": "string" },
+                "description": "Set of key-value pairs attached to the object."
+              },
+              "preferred_locales": { "type": ["array", "null"], "items": { "type": "string" } }
+            },
+            "required": ["created", "email", "id", "livemode", "object"]
+          }
+        ],
+        "x-expandableFields": ["address", "default_source"]
+      },
+      "Address": {
+        "title": "Address",
+        "type": "object",
+        "description": "Billing address associated with a customer.",
+        "properties": {
+          "city": { "type": ["string", "null"], "maxLength": 5000 },
+          "country": { "type": ["string", "null"], "maxLength": 2 },
+          "line1": { "type": ["string", "null"], "maxLength": 5000 },
+          "line2": { "type": ["string", "null"], "maxLength": 5000 },
+          "postal_code": { "type": ["string", "null"], "maxLength": 5000 },
+          "state": { "type": ["string", "null"], "maxLength": 5000 }
+        },
+        "x-expandableFields": []
+      },
+      "Card": {
+        "title": "Card",
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "object": { "type": "string", "enum": ["card"] },
+          "brand": { "type": "string", "enum": ["visa", "mastercard", "amex"] },
+          "last4": { "type": "string" }
+        },
+        "required": ["id", "object"],
+        "x-expandableFields": []
+      },
+      "DeletedCustomer": {
+        "title": "DeletedCustomer",
+        "type": "object",
+        "properties": {
+          "deleted": { "type": "boolean", "enum": [true] },
+          "id": { "type": "string" },
+          "object": { "type": "string", "enum": ["customer"] }
+        },
+        "required": ["deleted", "id", "object"],
+        "x-expandableFields": []
+      },
+      "NotificationEventRequest": {
+        "title": "NotificationEventRequest",
+        "type": "object",
+        "properties": {
+          "id": { "type": ["string", "null"] },
+          "idempotency_key": { "type": ["string", "null"] }
+        },
+        "x-expandableFields": []
+      },
+      "NotificationEventData": {
+        "title": "NotificationEventData",
+        "type": "object",
+        "description": "Object containing the API resource relevant to the event.",
+        "properties": {
+          "object": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Full API resource, e.g. a Customer object."
+          }
+        },
+        "required": ["object"],
+        "x-expandableFields": []
+      },
+      "Event": {
+        "title": "Event",
+        "type": "object",
+        "description": "Stripe event object delivered to webhook endpoints.",
+        "properties": {
+          "id": { "type": "string" },
+          "object": { "type": "string", "enum": ["event"] },
+          "api_version": { "type": ["string", "null"] },
+          "created": { "type": "integer", "format": "unix-time" },
+          "data": { "$ref": "#/components/schemas/NotificationEventData" },
+          "livemode": { "type": "boolean" },
+          "pending_webhooks": { "type": "integer" },
+          "request": {
+            "anyOf": [{ "$ref": "#/components/schemas/NotificationEventRequest" }],
+            "nullable": true
+          },
+          "type": { "type": "string", "description": "Description of the event, e.g., customer.created." }
+        },
+        "required": ["created", "data", "id", "livemode", "object", "pending_webhooks", "type"],
+        "x-expandableFields": ["data", "request"]
+      }
+    }
+  },
+  "paths": {
+    "/v1/customers": {
+      "post": {
+        "operationId": "PostCustomers",
+        "summary": "Create a customer",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "address": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "city": { "type": "string" },
+                          "country": { "type": "string" },
+                          "line1": { "type": "string" },
+                          "postal_code": { "type": "string" }
+                        }
+                      },
+                      { "enum": [""] }
+                    ]
+                  },
+                  "description": { "type": ["string", "null"], "maxLength": 5000 },
+                  "email": { "type": ["string", "null"], "maxLength": 512 },
+                  "expand": { "type": "array", "items": { "type": "string" } },
+                  "name": { "type": ["string", "null"], "maxLength": 256 },
+                  "phone": { "type": ["string", "null"], "maxLength": 20 },
+                  "tax_exempt": { "type": "string", "enum": ["", "exempt", "none"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Customer" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/customers/{customer}": {
+      "get": {
+        "operationId": "GetCustomersCustomer",
+        "summary": "Retrieve a customer",
+        "parameters": [
+          {
+            "name": "customer",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": { "type": "string", "maxLength": 5000 }
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "required": false,
+            "explode": true,
+            "style": "deepObject",
+            "description": "Specifies which fields in the response should be expanded.",
+            "schema": { "type": "string", "maxLength": 5000 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/Customer" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "response_note": { "type": "string" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DeletedCustomer" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {
+    "customer.created": {
+      "post": {
+        "operationId": "CustomerCreatedWebhook",
+        "summary": "customer.created",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  { "$ref": "#/components/schemas/Event" },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": { "type": "string", "enum": ["customer.created"] }
+                    },
+                    "required": ["type"]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "received": { "type": "boolean" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

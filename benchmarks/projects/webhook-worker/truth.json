@@ -1,0 +1,19 @@
+{
+  "findings": [
+    {
+      "file": "src/worker.ts",
+      "fieldPath": "phone",
+      "operation": "webhook customer.created",
+      "kind": "sdk_field",
+      "confidence": "high"
+    },
+    {
+      "file": "src/worker.ts",
+      "fieldPath": "data.previous_attributes",
+      "operation": "webhook customer.created",
+      "kind": "webhook_handler",
+      "confidence": "high"
+    }
+  ],
+  "unresolved": []
+}

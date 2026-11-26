@@ -1,0 +1,19 @@
+{
+  "findings": [
+    {
+      "file": "src/app/api/customers/[id]/route.ts",
+      "fieldPath": "expand: default_source",
+      "operation": "GET /v1/customers/{customer}",
+      "kind": "expand_array",
+      "confidence": "high"
+    },
+    {
+      "file": "src/app/api/customers/[id]/route.ts",
+      "fieldPath": "balance",
+      "operation": "GET /v1/customers/{customer}",
+      "kind": "sdk_field",
+      "confidence": "high"
+    }
+  ],
+  "unresolved": []
+}

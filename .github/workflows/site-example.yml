@@ -1,0 +1,99 @@
+name: Site example data
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-example-data
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      # Write access is used only to push the PR branch, never main.
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install and build the CLI
+        run: npm ci && npm run build
+
+      - name: Scan the checked-in Stripe fixture pair
+        run: |
+          npm start -- scan \
+            --repo . \
+            --old src/diff/fixtures/stripe-real-old.json \
+            --new src/diff/fixtures/stripe-real-new.json \
+            --old-version stripe-real-old \
+            --new-version stripe-real-new \
+            --json "$RUNNER_TEMP/dokimana-impact.json" \
+            --markdown "$RUNNER_TEMP/dokimana-evidence.md"
+
+      - name: Capture the report command output
+        run: |
+          npm start -- report \
+            --repo . \
+            --impact "$RUNNER_TEMP/dokimana-impact.json" \
+            --provider-version 2026-03-31.stripe-real-new \
+            --output "$RUNNER_TEMP/dokimana-evidence.md" \
+            > "$RUNNER_TEMP/dokimana-terminal.txt"
+
+      - name: Generate deterministic site data
+        run: |
+          node scripts/generate-site-example.mjs \
+            --terminal "$RUNNER_TEMP/dokimana-terminal.txt" \
+            --markdown "$RUNNER_TEMP/dokimana-evidence.md" \
+            --output-dir site/data \
+            --old src/diff/fixtures/stripe-real-old.json \
+            --new src/diff/fixtures/stripe-real-new.json \
+            --old-version stripe-real-old \
+            --new-version stripe-real-new
+
+      - name: Detect generated changes
+        id: changes
+        run: |
+          if git diff --quiet -- site/data/example-run.json site/data/example-report.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open a pull request for generated data
+        if: steps.changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
+        with:
+          base: main
+          branch: automation/site-example-data
+          commit-message: 'chore(site): refresh generated example data'
+          title: 'Refresh generated site example data'
+          body: |
+            Refreshes the checked-in terminal sample and trimmed evidence report
+            from a local CLI run against the checked-in Stripe fixture pair.
+
+            The generator itself does not fetch inputs or execute repository
+            code, and no live Stripe API is called. Review the generated numbers
+            and text before merging.
+          add-paths: |
+            site/data/example-run.json
+            site/data/example-report.json

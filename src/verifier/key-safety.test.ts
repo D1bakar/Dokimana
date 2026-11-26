@@ -9,6 +9,10 @@ describe('Stripe key safety', () => {
     });
   });
 
+  it('rejects rk_live restricted keys', () => {
+    expect(validateStripeKey('rk_live_123').safe).toBe(false);
+  });
+
   it('accepts test keys', () => {
     expect(validateStripeKey('sk_test_123').safe).toBe(true);
     expect(validateStripeKey('rk_test_123').safe).toBe(true);
@@ -25,6 +29,9 @@ describe('Stripe key safety', () => {
   it('rejects a live key embedded in another environment variable', () => {
     expect(() =>
       assertSafeTestModeKeys({ THIRD_PARTY_CONFIG: 'prefix sk_live_secret suffix' }),
+    ).toThrow(/Live Stripe secret keys are forbidden/);
+    expect(() =>
+      assertSafeTestModeKeys({ THIRD_PARTY_CONFIG: 'prefix rk_live_secret suffix' }),
     ).toThrow(/Live Stripe secret keys are forbidden/);
   });
 });
