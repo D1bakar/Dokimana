@@ -1,0 +1,56 @@
+name: Feature request
+description: Propose a bounded improvement to Dokimana.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Dokimana is early-stage and local-first. Please describe the problem before the
+        solution, and be explicit about what the change should not claim.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI
+        - GitHub Action
+        - Site
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the migration or review task that is difficult today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Keep it narrow and testable.
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Boundaries and non-goals
+      description: What should remain unsupported or explicitly `needs_human`?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include manual workflows or existing tools you considered.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: This request does not depend on live Stripe API calls.
+          required: true
+        - label: This request does not imply complete coverage or runtime proof.
+          required: true

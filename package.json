@@ -1,7 +1,18 @@
 {
   "name": "dokimana",
   "version": "0.1.0",
-  "description": "Local CLI for Stripe API change impact",
+  "description": "Local CLI that traces Stripe OpenAPI changes to call sites",
+  "keywords": [
+    "cli",
+    "typescript",
+    "javascript",
+    "stripe",
+    "openapi",
+    "api-compatibility",
+    "static-analysis",
+    "developer-tools",
+    "github-action"
+  ],
   "license": "MIT",
   "type": "module",
   "engines": {

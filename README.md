@@ -1,5 +1,10 @@
 # Dokimana
 
+[![CI](https://github.com/D1bakar/Dokimana/actions/workflows/ci.yml/badge.svg)](https://github.com/D1bakar/Dokimana/actions/workflows/ci.yml)
+[![Site CI](https://github.com/D1bakar/Dokimana/actions/workflows/site-ci.yml/badge.svg)](https://github.com/D1bakar/Dokimana/actions/workflows/site-ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-1656cc.svg)](LICENSE)
+[![Node.js 20+](https://img.shields.io/badge/node-%3E%3D20-1656cc.svg)](https://nodejs.org/)
+
 Dokimana is a local command-line tool for one job: compare two Stripe OpenAPI JSON files and find the TypeScript or JavaScript code that may be affected by what changed. It writes review files you can keep. It does not contact Stripe.
 
 ## What it does
@@ -116,6 +121,17 @@ npm run format:check
 
 Site checks live in `site/` and run separately. Before contributing, keep changes focused, add a test for new behavior, and never include credentials or generated reports.
 
+## Project documents
+
+- [Contributing guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+- [Code of conduct](CODE_OF_CONDUCT.md)
+- [Design contract](DESIGN.md)
+- [Site documentation](site/README.md)
+- [Contributor and agent guide](agent.md)
+- [Repository maintenance](MAINTAINING.md)
+
 ## License
 
-MIT.
+MIT. See [LICENSE](LICENSE).
