@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -20,12 +20,41 @@ const pages = [
 ]
 
 describe('site content', () => {
-  it('labels the homepage example as synthetic and states the verification boundary', async () => {
+  it('keeps only the document sections in the requested order', async () => {
     const home = await read('app/page.tsx')
-    expect(home).toContain('fictional')
-    expect(home).toContain('synthetic')
+    const ids = [
+      'what-it-is',
+      'what-it-does',
+      'limits',
+      'setup',
+      'use',
+      'difference',
+    ]
+    let previous = -1
+    for (const id of ids) {
+      const index = home.indexOf(`id="${id}"`)
+      expect(index, `missing section ${id}`).toBeGreaterThan(-1)
+      expect(index).toBeGreaterThan(previous)
+      previous = index
+    }
+    expect(home).toContain('What it cannot do yet')
+    expect(home).toContain('How it is different')
+  })
+
+  it('states the verification and evidence boundaries', async () => {
+    const home = await read('app/page.tsx')
     expect(home).toContain('could_not_run')
     expect(home).toContain('needs_human')
+    expect(home).toContain('does not call Stripe')
+    expect(home).toContain('No superiority claim')
+  })
+
+  it('uses the real CLI commands and flags from the project README', async () => {
+    const [home, readme] = await Promise.all([read('app/page.tsx'), read('../README.md')])
+    for (const fragment of ['--fail-on-changes true', 'fixtures/stripe-old.json', 'npm ci']) {
+      expect(home).toContain(fragment)
+      expect(readme).toContain(fragment)
+    }
   })
 
   it.each(pages.filter((page) => page !== 'app/page.tsx'))(
@@ -35,52 +64,8 @@ describe('site content', () => {
     },
   )
 
-  it('resolves every internal route referenced by nav, footer, or search', async () => {
-    const sources = await Promise.all([
-      read('components/nav.tsx'),
-      read('components/footer.tsx'),
-      read('lib/search-data.ts'),
-    ])
-    const routes = new Set(
-      sources.flatMap((source) =>
-        [...source.matchAll(/(?:href=|href:)\s*['"](\/[^'"]*)['"]/g)].map(
-          (match) => match[1]!.split('#')[0]!,
-        ),
-      ),
-    )
-
-    expect(routes.size).toBeGreaterThan(0)
-    await Promise.all(
-      [...routes].map(async (route) => {
-        const file = route === '/' ? 'app/page.tsx' : `app${route}/page.tsx`
-        await expect(access(join(root, file))).resolves.toBeUndefined()
-      }),
-    )
-  })
-
-  it('resolves every in-site anchor used by search and footer links', async () => {
-    const sources = await Promise.all([
-      read('components/footer.tsx'),
-      read('lib/search-data.ts'),
-      read('app/docs/page.tsx'),
-    ])
-    const links = sources.flatMap((source) =>
-      [...source.matchAll(/(?:href=|href:)\s*['"](\/[^'"]*#[^'"]+)['"]/g)].map(
-        (match) => match[1]!,
-      ),
-    )
-
-    expect(links.length).toBeGreaterThan(0)
-    for (const link of links) {
-      const [route, anchor] = link.split('#')
-      const file = route === '/' ? 'app/page.tsx' : `app${route}/page.tsx`
-      expect(await read(file)).toContain(`id="${anchor}"`)
-    }
-  })
-
   it('does not collect secrets, load remote scripts, or use remote fonts', async () => {
-    const sources = await Promise.all(pages.map(read))
-    const all = sources.join('\n')
+    const all = (await Promise.all(pages.map(read))).join('\n')
     expect(all).not.toMatch(/sk_live_|-----BEGIN [A-Z ]*PRIVATE KEY-----/)
     expect(all).not.toMatch(/fonts\.googleapis\.com|googletagmanager|google-analytics/)
     expect(all).not.toMatch(/<script[^>]+src=/)

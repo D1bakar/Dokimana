@@ -1,18 +1,13 @@
 import type { Metadata } from 'next'
-import { Nav } from '@/components/nav'
-import { Footer } from '@/components/footer'
 import '@/app/globals.css'
-import '@/app/components.css'
-
-const themeScript = `(function(){try{var stored=localStorage.getItem('apiproof-theme');var dark=stored==='dark'||(stored!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',dark);document.documentElement.style.colorScheme=dark?'dark':'light';}catch(e){}})();`
 
 export const metadata: Metadata = {
   title: {
-    default: 'ApiProof — Trace Stripe API changes to likely call sites',
+    default: 'ApiProof — Local evidence for Stripe API changes',
     template: '%s — ApiProof',
   },
   description:
-    'ApiProof compares supplied Stripe OpenAPI contracts and finds likely TypeScript/JavaScript call-site impact. Local-first CLI, no live Stripe calls.',
+    'Compare supplied Stripe OpenAPI contracts, find likely TypeScript and JavaScript call sites, and get an honest evidence report. Local-first CLI with no live Stripe calls.',
   applicationName: 'ApiProof',
   keywords: [
     'Stripe API changes',
@@ -23,16 +18,16 @@ export const metadata: Metadata = {
     'static analysis',
   ],
   openGraph: {
-    title: 'ApiProof — Trace Stripe API changes to likely call sites',
+    title: 'ApiProof — Local evidence for Stripe API changes',
     description:
       'Compare supplied Stripe OpenAPI contracts, find likely TypeScript and JavaScript call sites, and get an honest evidence report.',
     type: 'website',
   },
   twitter: {
     card: 'summary',
-    title: 'ApiProof — Trace Stripe API changes to likely call sites',
+    title: 'ApiProof — Local evidence for Stripe API changes',
     description:
-      'Compare supplied Stripe OpenAPI contracts and find likely TypeScript and JavaScript call-site impact.',
+      'Local-first CLI for Stripe API change impact with evidence and explicit limits.',
   },
   robots: {
     index: true,
@@ -42,17 +37,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-      </head>
+    <html lang="en">
       <body>
         <a href="#main" className="skip-link">
           Skip to content
         </a>
-        <Nav />
-        <main id="main">{children}</main>
-        <Footer />
+        {children}
       </body>
     </html>
   )

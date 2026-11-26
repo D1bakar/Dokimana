@@ -1,54 +1,101 @@
-# ApiProof Website Design System
+# ApiProof website: design contract
 
-The Next.js pages in `site/` use an evidence-first editorial language: a real product artifact is the visual subject, not a metaphor or a generic dashboard.
+This brief records the visual world for the Next.js pages in `site/`. The site is a
+document, not a marketing funnel: one reading column, six sections, and no decoration.
+Every element must earn its place by making the evidence or the boundary clearer.
 
-## Surface and mode
+## Decision
 
-- **Surface:** public product landing, method, safety, and quick-start pages.
-- **Mode:** persuade engineers with a legible evidence trail, then guide them to local CLI usage.
-- **Audience:** developers evaluating a Stripe API-change impact tool.
-- **Visual direction:** adapt the image-led hierarchy and spacious composition of the requested property reference using ApiProof's actual report artifact as the visual. Do not copy its content or use an unrelated architectural metaphor.
+The previous card-and-panel presentation was discarded. The new reference direction is
+threadlocked.xyz's unboxed, narrow, serif reading column combined with
+righthemisphere.studio's large, sparing typography and generous vertical space. The
+result is a clean developer document with a text contents rail, not an IDE mock-up and
+not a generic landing page.
 
-## Color
+## Palette
 
-The interface uses exactly three base colors. Transparent tints are derived only from these roles.
+Exactly three values:
 
-| Role            | Value     | Use                                                                       |
-| --------------- | --------- | ------------------------------------------------------------------------- |
-| Deep navy       | `#0A2540` | Primary text, source excerpt, footer, and high-contrast evidence surfaces |
-| Cool near-white | `#F6F9FC` | Page background, readable panels, and text on navy                        |
-| Indigo          | `#635BFF` | Structural change marks, focus indicator, active accents, and key links   |
+| Role       | Value     | Use                               |
+| ---------- | --------- | --------------------------------- |
+| Paper      | `#f5f5f5` | Page background                   |
+| Ink        | `#292929` | All body text and headings        |
+| Link blue  | `#1656cc` | Links and focus outlines only     |
 
-No additional hue, colorful gradient, or rainbow status system. Statuses are labeled in words. Opacity variations of the three colors provide hierarchy.
+Hierarchy comes from size, weight, and space. Ink at reduced opacity may create secondary
+text; no other hue, gradient, fill, or decorative color is introduced.
 
 ## Type and layout
 
-- **Display:** Georgia/system serif stack for editorial headlines, paired with a native system sans for navigation and reading.
-- **Technical face:** system monospace, limited to code, paths, flags, and structural change names.
-- **Content width:** maximum 1320px for the landing page and 1100px for reading sections; use generous horizontal and vertical breathing room.
-- **Homepage opening:** a direct product promise and local action lead to a synthetic report excerpt showing a before/after schema and a possible source match.
-- **Reading rhythm:** inspect the evidence example, read what static analysis can and cannot show, see the verifier's actual `could_not_run` state, then reach the local quick start.
+- Serif stack for prose; system sans for headings, contents, and masthead; system mono
+  for commands, flags, paths, and status values. No remote or proprietary fonts.
+- Reading column maxes out near 720px; the contents rail is 200px; the outer shell caps
+  at 1240px with responsive gutters.
+- Headings are large and tightly tracked. Sections are separated by vertical space, not
+  rules, cards, or panels.
+- Commands are plain monospace text with wrapping. No terminal window, code panel,
+  copy button, or background fill.
+- The bottom status line states real facts: local files only, Node.js 20+,
+  `verification: could_not_run`.
 
-## Components and behavior
+## Content contract
 
-- **Header:** compact wordmark, Method/Safety/Docs navigation, search, appearance toggle, and local-scan action; a keyboard-operable disclosure menu on narrow screens.
-- **Evidence excerpt:** semantic HTML displays fictional before/after schema snippets and a possible source match. A nearby disclosure says no scan ran and the values are invented.
-- **Search:** a site-wide dialog opens from the header or with `/` (also Ctrl/Cmd+K), indexes every command and boundary, and supports arrow keys, Enter, Escape, and focus return.
-- **Evidence boundary:** distinguish supported static findings from complete coverage or runtime proof; unsupported fixes remain `needs_human`.
-- **Verification record:** reports `could_not_run`, explicitly stating that repository code was not executed.
-- **Motion:** no entrance or reveal animation; static evidence stays visible immediately. Respect reduced motion for any future nonessential movement.
-- **Assets:** product evidence is rendered as local HTML and CSS; no stock image, decorative illustration, external font, or network dependency.
+The document contains exactly six sections in this order:
 
-## Anti-template review
+1. What it is
+2. What it does
+3. What it cannot do yet
+4. Setup
+5. How to use it
+6. How it is different
 
-The user supplied [“Fix AI Slop Website Design”](https://buildtolaunch.substack.com/p/fix-ai-slop-website-design) as a negative reference. Use it as a prompt to inspect combinations of unmotivated conventions, not as a ban on every small label, number, serif face, or card in isolation. For this site, the concrete choices are to avoid a centered generic hero, a headline with one highlighted word, repeated uppercase kickers, a three-card feature grid, generic status badges, architectural filler, and decorative reveal animation. The product report—not a metaphor—is the hero. Keep only labels that identify actual synthetic evidence or runtime status. Do not use statistics from the article as universal findings.
+The difference section makes no competitor superiority claim. It lists verifiable design
+boundaries: local inputs, no live calls, evidence and confidence, `needs_human`,
+`could_not_run`, and no automatic writes to user files.
 
-## Accessibility and responsive rules
+Do not claim customers, adoption, benchmarks, complete AST coverage, a working
+verification runner, live API integration, or secret handling by the site. Commands must
+match the CLI in `src/cli.ts` and the project README.
 
-Use semantic landmarks, a skip link, one `h1`, ordered headings, meaningful link names, visible focus, and text labels for statuses. The synthetic report is semantic HTML, not an image. On tablet and mobile, reflow the proposition, comparison panes, source excerpt, and status record into a readable column. Preserve keyboard access, zoom, source order, and reduced motion.
+## Interaction and accessibility
 
-## Product-truth constraints
+- One `h1`, ordered heading levels, semantic landmarks, a skip link, and a focusable main.
+- Every section is reachable from the contents list; links use real anchors.
+- Visible focus via the link-blue outline; keyboard and zoom work without horizontal
+  page overflow.
+- At narrow widths the contents rail becomes a wrapped row above the reading column.
+- No animation except instant scroll behavior, which is disabled under reduced motion.
+- No secret fields, trackers, remote scripts, remote fonts, or network calls.
 
-The report's field name and source location are fictional, not a Stripe schema or scan result. Static impact is likely evidence, not proof of runtime failure. The container runner does not execute scenarios and returns `could_not_run`. Do not add a secret-entry field, live API calls, trackers, remote fonts, or claims of complete call-site coverage.
+## Reference research
 
-See [`design.md`](design.md) for the visual contract, reference research, and review checklist.
+References inspected **2026-11-26** unless noted.
+
+1. **Threadlocked** — supplied reference for an unboxed, text-first, serif reading column
+   and a small set of principles stated plainly.
+   https://threadlocked.xyz/
+2. **Right Hemisphere** — supplied reference for large sparing typography, generous
+   vertical rhythm, and a minimal text navigation.
+   https://www.righthemisphere.studio/
+3. **ApiProof design contract and review checklist (previous revision)** — retained the
+   truthfulness checks that predate this redesign.
+   `DESIGN.md` history in this repository.
+4. **Stripe design extract, shared earlier.** No Stripe assets, copy, or affiliation are
+   implied by the current palette.
+   https://designmd.me/s/stripe-cd7ld
+5. **W3C, Web Content Accessibility Guidelines (WCAG) 2.2.** Basis for keyboard access,
+   focus visibility, contrast, and reflow.
+   https://www.w3.org/TR/WCAG22/
+6. **User-supplied negative reference: “Fix AI Slop Website Design.”** A reminder to
+   reject unmotivated templates, cards, badges, and fake instrumentation; no statistics
+   from the article are treated as general findings.
+   https://buildtolaunch.substack.com/p/fix-ai-slop-website-design
+
+## Review checklist
+
+- [ ] The visitor sees what the tool is, what it does, its limits, setup, use, and differences in one scroll.
+- [ ] No card, border, divider, shadow, gradient, badge, stock image, or remote font remains.
+- [ ] Every command and limit matches `../README.md` and `agent.md`.
+- [ ] The synthetic nature of fixture inputs and the `could_not_run` boundary stay explicit.
+- [ ] Old routes still resolve to the right section.
+- [ ] Keyboard, focus, zoom, and 320–390px reflow work without page overflow.

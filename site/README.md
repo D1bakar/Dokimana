@@ -1,21 +1,25 @@
 # ApiProof site
 
-The public site for ApiProof, built with Next.js 15 (App Router) and React 19.
-It is statically renderable and has no runtime backend dependency.
+A single-page document site for ApiProof, built with Next.js 15 (App Router) and React 19.
+It is statically renderable, has no runtime backend, and ships no client-side JavaScript
+for navigation or appearance controls.
 
-## Routes
+## Structure
 
-| Route         | Purpose                                                    |
-| ------------- | ---------------------------------------------------------- |
-| `/`           | Product promise and a disclosed synthetic impact report    |
-| `/method`     | Five stages from supplied contracts to reviewable evidence |
-| `/safety`     | Key refusal and the container execution boundary           |
-| `/quickstart` | Install, run each CLI command, and inspect flags           |
-| `/docs`       | Command, GitHub Action, report, and scope reference        |
-| `/about`      | Project scope and current limits                           |
-| `/contact`    | Issue, security, and discussion channels                   |
+The homepage is one document with six sections: what ApiProof is, what it does, what it
+cannot do yet, setup, how to use it, and how it is different. A text contents rail links
+to each section. Former topic routes (`/method`, `/safety`, `/quickstart`, `/docs`,
+`/about`, `/contact`) redirect to the matching section or to the project issue tracker so
+existing links keep working.
 
-`/` is the home page; an unmatched route renders `app/not-found.tsx`.
+```
+app/page.tsx       document and in-page contents
+app/layout.tsx     metadata, skip link, stylesheet
+app/globals.css    all styles
+app/not-found.tsx  missing-route fallback
+app/*/page.tsx     redirects for old routes
+tests/             source-level content checks and document navigation tests
+```
 
 ## Local development
 
@@ -35,39 +39,27 @@ npm run build
 npm start
 ```
 
-`next.config.mjs` pins the tracing root to this directory and keeps type and lint
-errors fatal during builds. `npm start` serves the production build.
-
-## Structure
-
-- `app/` — layouts, routes, global styles, and the SVG icon.
-- `components/` — navigation, search dialog, code blocks, theme toggle, footer.
-- `lib/search-data.ts` — the search index and its pure filter function.
-- `tests/` — jsdom tests for navigation/search and source-level content checks.
-
-Navigation and search are client components. The theme is applied by a
-pre-paint inline script so a stored dark preference never flashes light.
+`next.config.mjs` pins the tracing root to this directory and keeps type and lint errors
+fatal during builds.
 
 ## Visual system
 
-Evidence-first editorial: serif display headlines, system sans reading text,
-and a precise technical mono. Deep navy `#0A2540`, cool near-white `#F6F9FC`,
-and indigo `#635BFF` are the only base colors; dark mode uses navy-derived
-surfaces and opacity variants of the same palette.
+Content first, no decoration. The palette is a paper background (`#f5f5f5`), ink text
+(`#292929`), and one blue link accent (`#1656cc`). Prose uses a serif stack, headings use
+a system sans, and commands and paths use a system mono. There are no cards, borders,
+shadows, gradients, badges, stock images, remote fonts, or entrance animation. The
+layout is deliberately narrow and text-led: a plain contents rail beside a reading
+column, with a factual status line at the bottom.
 
-The homepage puts a clearly synthetic impact-report excerpt first: a supplied
-schema before/after and a possible source match. It explains what static
-evidence can and cannot establish, shows the current `could_not_run` verifier
-status, and links to the local CLI.
+The design is informed by two references supplied for their restraint rather than their
+imagery: [Threadlocked](https://threadlocked.xyz/) for its narrow, unboxed, serif reading
+column, and [Right Hemisphere](https://www.righthemisphere.studio/) for large, sparing
+typography and generous vertical space. Nothing from either site is copied.
 
-## Copy and asset rules
+## Copy rules
 
-Claims come from `../README.md` and `../agent.md`. Keep the current limits
-explicit: no live Stripe calls; local component-schema references are supported;
-unsupported patterns remain outside coverage; the container runner reports
-`could_not_run` and does not execute repository code.
-
-The report excerpt is synthetic, not a real Stripe contract, repository scan, or
-finding. Keep its disclosure adjacent to the code, and do not imply a scan was
-run. Do not add stock imagery, third-party scripts, remote fonts, key-entry
-forms, invented metrics, generic status badges, or claims of live verification.
+Claims come from `../README.md` and `../agent.md`. Keep the current limits explicit: no
+live Stripe calls; no provider retrieval; unsupported patterns remain outside coverage;
+the container runner reports `could_not_run` and does not execute repository code. Do not
+add a secret-entry field, tracker, remote script, invented metric, or claim that a scan
+proves runtime safety. Commands and flags shown on the page must match the real CLI.

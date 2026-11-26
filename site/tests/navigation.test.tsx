@@ -1,15 +1,7 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import type { AnchorHTMLAttributes, ReactNode } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { Nav } from '@/components/nav'
-import { Search } from '@/components/search'
-
-const { push } = vi.hoisted(() => ({ push: vi.fn() }))
-
-vi.mock('next/navigation', () => ({
-  usePathname: () => '/method',
-  useRouter: () => ({ push }),
-}))
+import { describe, expect, it, vi } from 'vitest'
+import HomePage from '@/app/page'
 
 vi.mock('next/link', () => ({
   default: ({
@@ -27,60 +19,24 @@ vi.mock('next/link', () => ({
 }))
 
 describe('site navigation', () => {
-  beforeEach(() => {
-    push.mockClear()
+  it('offers an in-page contents list for every document section', () => {
+    render(<HomePage />)
+    const contents = screen.getByRole('navigation', { name: 'On this page' })
+    const links = within(contents).getAllByRole('link')
+
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '#what-it-is',
+      '#what-it-does',
+      '#limits',
+      '#setup',
+      '#use',
+      '#difference',
+    ])
   })
 
-  it('opens and closes the mobile menu with the menu button and Escape', () => {
-    render(<Nav />)
-    const toggle = screen.getByRole('button', { name: 'Open menu' })
-
-    expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByRole('navigation', { name: 'Mobile navigation' })).not.toBeInTheDocument()
-
-    fireEvent.click(toggle)
-    expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    const mobileNav = screen.getByRole('navigation', { name: 'Mobile navigation' })
-    expect(within(mobileNav).getByRole('link', { name: 'Install CLI' })).toBeInTheDocument()
-
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.queryByRole('navigation', { name: 'Mobile navigation' })).not.toBeInTheDocument()
-  })
-
-  it('marks the current route in the primary navigation', () => {
-    render(<Nav />)
-    const primary = screen.getByRole('navigation', { name: 'Main navigation' })
-    expect(within(primary).getByRole('link', { name: 'Method' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    )
-    expect(within(primary).getByRole('link', { name: 'Safety' })).not.toHaveAttribute(
-      'aria-current',
-    )
-  })
-
-  it('opens search with the keyboard, filters results, and navigates with Enter', () => {
-    render(<Search />)
-    fireEvent.keyDown(document, { key: 'k', metaKey: true })
-
-    const input = screen.getByRole('combobox')
-    fireEvent.change(input, { target: { value: 'likely call sites' } })
-
-    const results = screen.getByRole('listbox', { name: 'Search results' })
-    expect(within(results).getByText('scan command')).toBeInTheDocument()
-
-    fireEvent.keyDown(input, { key: 'Enter' })
-    expect(push).toHaveBeenCalledWith('/quickstart#scan')
-  })
-
-  it('closes search on Escape and returns focus to the trigger', () => {
-    render(<Search />)
-    const trigger = screen.getByRole('button', { name: 'Search the site' })
-    fireEvent.click(trigger)
-
-    expect(screen.getByRole('dialog', { name: 'Search the site' })).toBeInTheDocument()
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(trigger).toHaveFocus()
+  it('keeps a single main landmark with the skip-link target', () => {
+    render(<HomePage />)
+    expect(screen.getAllByRole('main')).toHaveLength(1)
+    expect(screen.getByRole('main')).toHaveAttribute('id', 'main')
   })
 })

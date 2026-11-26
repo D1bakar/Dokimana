@@ -29,7 +29,7 @@ The CLI coordinates modules under `src/`: `diff` compares structured documents, 
 
 ## Website
 
-The public site in [`site/`](site/) is a Next.js App Router app that documents the CLI, its safety boundaries, the command reference, and the quick start. It is optional for using the CLI.
+The public site in [`site/`](site/) is a single-page Next.js document covering what ApiProof is, what it does, its current limits, setup, usage, and verifiable differences. It is optional for using the CLI. Former topic routes redirect into the matching section.
 
 ```bash
 cd site
@@ -37,7 +37,7 @@ npm ci
 npm run dev
 ```
 
-Run `npm run lint`, `npm run type-check`, `npm test`, and `npm run build` in `site/` before shipping changes. See [`site/README.md`](site/README.md) for routes and content rules.
+Run `npm run lint`, `npm run type-check`, `npm test`, and `npm run build` in `site/` before shipping changes. See [`site/README.md`](site/README.md) for structure and content rules, and [`DESIGN.md`](DESIGN.md) for the visual contract.
 
 ## Requirements and setup
 
