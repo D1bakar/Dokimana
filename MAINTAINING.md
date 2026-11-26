@@ -10,6 +10,8 @@ A short checklist for presentation and release work. Keep this file factual; do 
 
 README badges must point to real workflows and real files. Do not add badges for unpublished packages, releases, sponsors, or metrics.
 
+Dependabot handles npm minor and patch updates. Major npm upgrades stay manual because this project uses peer-ranged tooling and should be reviewed as a deliberate change.
+
 ## Release checklist
 
 1. Move finished entries from `Unreleased` to a version section in [CHANGELOG.md](CHANGELOG.md).
