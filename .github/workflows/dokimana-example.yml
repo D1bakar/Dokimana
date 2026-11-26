@@ -1,37 +1,52 @@
-name: Dokimana
+name: Dokimana example
 
 on:
   pull_request:
   workflow_dispatch:
 
+# SARIF upload and the sticky PR comment need write scopes. Fork PRs receive a
+# read-only token; set comment/upload-sarif to false for untrusted forks.
 permissions:
   contents: read
+  pull-requests: write
+  security-events: write
+  actions: read
 
 jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the pull request and its base ref
+        uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - name: Scan Stripe API changes
-        uses: ./
+
+      # Use the published action, which includes a committed dist/src/cli.js.
+      # Do not build untrusted pull request code in a job with a write token.
+      - name: Scan API changes
+        id: dokimana
+        uses: D1bakar/Dokimana@v1
         with:
           repo: .
           old-openapi: fixtures/stripe-old.json
           new-openapi: fixtures/stripe-new.json
           old-version: fixture-old
           new-version: fixture-new
-          impact-output: dokimana-impact.json
-          report-output: dokimana-evidence.md
+          base-ref: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+          head-ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || 'HEAD' }}
           fail-on-changes: false
-      - name: Upload impact report
-        uses: actions/upload-artifact@v4
+          fail-on: high
+          format: sarif
+          comment: true
+          upload-artifacts: true
+          upload-sarif: true
+
+      - name: Write job summary
         if: always()
-        with:
-          name: dokimana-evidence
-          path: |
-            dokimana-impact.json
-            dokimana-evidence.md
-          if-no-files-found: error
-          retention-days: 7
+        run: |
+          echo '## Dokimana' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Changes: ${{ steps.dokimana.outputs.changes }}' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Findings: ${{ steps.dokimana.outputs.findings }}' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Unresolved: ${{ steps.dokimana.outputs.unresolved }}' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Artifact reports: ${{ steps.dokimana.outputs.report-path }}, ${{ steps.dokimana.outputs.sarif-path }}' >> "$GITHUB_STEP_SUMMARY"

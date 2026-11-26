@@ -1,0 +1,25 @@
+{
+  "findings": [],
+  "unresolved": [
+    {
+      "file": "src/dynamic.ts",
+      "kind": "dynamic_call",
+      "reason": "Bracket notation uses a runtime array index, so the invoked Stripe method and endpoint cannot be resolved statically."
+    },
+    {
+      "file": "src/dynamic.ts",
+      "kind": "spread_argument",
+      "reason": "Arguments are spread from an unknown[] value, so parameter names such as expand or tax_exempt are not statically visible."
+    },
+    {
+      "file": "src/dispatch.ts",
+      "kind": "dynamic_call",
+      "reason": "The method name comes from an environment variable; bracket notation prevents static endpoint resolution."
+    },
+    {
+      "file": "src/dispatch.ts",
+      "kind": "spread_argument",
+      "reason": "Object.values(params) spreads runtime values with no statically known field names."
+    }
+  ]
+}

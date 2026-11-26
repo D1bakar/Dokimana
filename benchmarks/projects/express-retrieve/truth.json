@@ -1,0 +1,19 @@
+{
+  "findings": [
+    {
+      "file": "src/retrieve-customer.ts",
+      "fieldPath": "phone",
+      "operation": "GET /v1/customers/{customer}",
+      "kind": "sdk_field",
+      "confidence": "high"
+    },
+    {
+      "file": "src/retrieve-customer.ts",
+      "fieldPath": "account_balance",
+      "operation": "GET /v1/customers/{customer}",
+      "kind": "sdk_field",
+      "confidence": "high"
+    }
+  ],
+  "unresolved": []
+}

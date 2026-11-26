@@ -1,0 +1,11 @@
+.git
+.github
+node_modules
+site
+dist
+coverage
+site/.next
+dokimana-impact.json
+dokimana-evidence.md
+verification.json
+*.log

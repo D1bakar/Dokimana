@@ -1,8 +1,8 @@
 # Dokimana site
 
 A single-page document site for Dokimana, built with Next.js 15 (App Router) and React 19.
-It is statically renderable, has no runtime backend, and ships no client-side JavaScript
-for navigation or appearance controls.
+It is statically renderable, has no runtime backend, and adds no custom client-side
+navigation or appearance logic beyond the Next.js defaults.
 
 ## Structure
 

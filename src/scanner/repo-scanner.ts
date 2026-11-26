@@ -8,11 +8,23 @@ import {
   type CallExpression,
   type ObjectLiteralExpression,
   type SourceFile,
+  type SwitchStatement,
   type VariableDeclaration,
 } from 'ts-morph';
-import type { ChangeKind, ChangeRecord, ImpactFinding, ImpactReport } from '../domain/types.js';
+import type {
+  CallSiteKind,
+  ChangeKind,
+  ChangeRecord,
+  Confidence,
+  ImpactFinding,
+  ImpactReport,
+  NeedsHumanItem,
+  UnresolvedItem,
+  UnresolvedKind,
+} from '../domain/types.js';
+import { buildProjectIndex, type SourceFacts } from './project-index.js';
+import { mapSdkOperation, operationMatchesChange, type SdkOperation } from './sdk-map.js';
 
-const STRIPE_MODULE = 'stripe';
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 const IGNORED_DIRECTORIES = new Set([
   '.git',
@@ -31,22 +43,27 @@ const FIELD_LEVEL_KINDS: ReadonlySet<ChangeKind> = new Set<ChangeKind>([
   'field_type_changed',
   'field_became_required',
   'enum_value_removed',
+  'expandable_field_removed',
+  'expandable_target_removed',
 ]);
-const INLINE_STRIPE_CLIENT = '<inline-stripe-client>';
+const EVENT_TYPE = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_.]*$/;
+const INLINE_CLIENT = '<inline>';
 const MAX_SNIPPET_LENGTH = 240;
-const MAX_REPORTED_DYNAMIC_SITES = 10;
 
-type Confidence = 'high' | 'medium';
-type ExtractionIssueKind = 'computed_key' | 'spread' | 'dynamic_argument';
+type FieldContext = 'request' | 'response' | 'typed' | 'webhook' | 'expand';
 
 interface ExtractedField {
   segments: string[];
   confidence: Confidence;
+  value?: string;
+  rawValue?: string;
 }
 
 interface ExtractionIssue {
-  kind: ExtractionIssueKind;
+  kind: UnresolvedKind;
   line: number;
+  column: number;
+  snippet: string;
 }
 
 interface ExtractionResult {
@@ -54,9 +71,34 @@ interface ExtractionResult {
   issues: ExtractionIssue[];
 }
 
-interface FileScanResult {
-  findings: ImpactFinding[];
-  dynamicSites: string[];
+interface ClientRoot {
+  text: string;
+  length: number;
+}
+
+interface SdkCallInfo {
+  call: CallExpression;
+  root: ClientRoot;
+  parts: string[];
+  operation?: SdkOperation;
+}
+
+interface DerivedValue {
+  parts: string[];
+  operation?: SdkOperation;
+}
+
+interface FindingInput {
+  change: ChangeRecord;
+  position: number;
+  operation: string;
+  fieldPath: string[];
+  kind: CallSiteKind;
+  confidence: Confidence;
+  snippet: string;
+  reason: string;
+  confidenceReason: string;
+  openApiOperation?: string;
 }
 
 export class RepoScanner {
@@ -70,19 +112,34 @@ export class RepoScanner {
     });
     if (sourcePaths.length > 0) project.addSourceFilesAtPaths(sourcePaths);
 
+    const factsByFile = buildProjectIndex(project);
     const fieldChanges = changes.filter(
       (change) => FIELD_LEVEL_KINDS.has(change.kind) && change.path !== undefined,
     );
-    const unmappedChanges = changes.filter((change) => !FIELD_LEVEL_KINDS.has(change.kind));
+    const needsHuman = changes
+      .filter((change) => !fieldChanges.includes(change))
+      .map(buildNeedsHumanItem);
 
     const findings: ImpactFinding[] = [];
-    const dynamicSites: string[] = [];
-    for (const sourceFile of project.getSourceFiles()) {
+    const unresolved: UnresolvedItem[] = [];
+    const sourceFiles = [...project.getSourceFiles()].sort((left, right) =>
+      left.getFilePath().localeCompare(right.getFilePath()),
+    );
+
+    for (const sourceFile of sourceFiles) {
       const file = resolve(sourceFile.getFilePath());
       const relativeFile = toPosixPath(relative(repositoryRoot, file));
-      const result = new FileScan(sourceFile, file, relativeFile, fieldChanges).run();
+      const facts = factsByFile.get(normalizePath(file));
+      if (!facts) continue;
+      const result = new FileScan({
+        sourceFile,
+        file: relativeFile,
+        facts,
+        changes: fieldChanges,
+        allChanges: changes,
+      }).run();
       findings.push(...result.findings);
-      dynamicSites.push(...result.dynamicSites);
+      unresolved.push(...result.unresolved);
     }
 
     return {
@@ -90,280 +147,545 @@ export class RepoScanner {
       root,
       changes,
       findings: dedupeFindings(findings).sort(compareFindings),
-      unverifiedCallSiteCoverage: buildCoverageNotes(unmappedChanges, dynamicSites),
+      needsHuman,
+      unresolved: dedupeUnresolved(unresolved).sort(compareUnresolved),
+      unverifiedCallSiteCoverage: buildCoverageNotes(needsHuman, unresolved, sourcePaths.length),
     };
   }
 }
 
 class FileScan {
-  private readonly constructorNames = new Set<string>();
-  private readonly clientNames = new Set<string>();
-  private readonly derivedNames = new Set<string>();
+  private readonly derived = new Map<string, DerivedValue>();
+  private readonly eventTypes = new Map<string, string>();
   private readonly findings: ImpactFinding[] = [];
-  private readonly dynamicSites: string[] = [];
+  private readonly unresolved: UnresolvedItem[] = [];
 
   constructor(
-    private readonly sourceFile: SourceFile,
-    private readonly file: string,
-    private readonly relativeFile: string,
-    private readonly fieldChanges: ChangeRecord[],
+    private readonly options: {
+      sourceFile: SourceFile;
+      file: string;
+      facts: SourceFacts;
+      changes: ChangeRecord[];
+      allChanges: ChangeRecord[];
+    },
   ) {}
 
-  run(): FileScanResult {
-    this.collectConstructorNames();
-    if (this.constructorNames.size === 0) return { findings: [], dynamicSites: [] };
-
-    this.collectClientNames();
-    if (this.clientNames.size === 0) return { findings: [], dynamicSites: [] };
-
-    this.collectDerivedNames();
-    this.scanCalls();
-    this.scanPropertyAccess();
+  run(): { findings: ImpactFinding[]; unresolved: UnresolvedItem[] } {
+    this.collectUnresolvedImports();
+    this.collectDerivedValues();
+    this.collectEventNarrowing();
+    this.scanSdkCalls();
     this.scanDestructuredBindings();
-    return { findings: this.findings, dynamicSites: this.dynamicSites };
+    this.scanPropertyAccess();
+    this.scanWebhookSwitches();
+    this.scanDynamicSites();
+    return { findings: this.findings, unresolved: this.unresolved };
   }
 
-  private collectConstructorNames(): void {
-    for (const declaration of this.sourceFile.getImportDeclarations()) {
-      if (declaration.getModuleSpecifierValue() !== STRIPE_MODULE) continue;
-      const defaultImport = declaration.getDefaultImport();
-      if (defaultImport) this.constructorNames.add(defaultImport.getText());
-      for (const namedImport of declaration.getNamedImports()) {
-        const alias = namedImport.getAliasNode();
-        this.constructorNames.add(alias ? alias.getText() : namedImport.getName());
-      }
-      const namespaceImport = declaration.getNamespaceImport();
-      if (namespaceImport) this.constructorNames.add(namespaceImport.getText());
+  private collectUnresolvedImports(): void {
+    for (const moduleSpecifier of this.options.facts.unresolvedImports) {
+      const position = 0;
+      this.recordUnresolved({
+        kind: 'unresolved_import',
+        position,
+        snippet: `import ... from '${moduleSpecifier}'`,
+        reason: `Import '${moduleSpecifier}' could not be resolved statically; Stripe usage in this module is unverified.`,
+      });
     }
+  }
 
-    for (const declaration of allVariableDeclarations(this.sourceFile)) {
-      if (!Node.isIdentifier(declaration.getNameNode())) continue;
+  private collectDerivedValues(): void {
+    const sourceFile = this.options.sourceFile;
+    for (const declaration of sourceFile.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
       const initializer = declaration.getInitializer();
       if (!initializer) continue;
-      const value = unwrapExpression(initializer);
-      if (Node.isCallExpression(value) && isRequireStripe(value)) {
-        this.constructorNames.add(declaration.getName());
-      }
-    }
-  }
-
-  private collectClientNames(): void {
-    for (const declaration of allVariableDeclarations(this.sourceFile)) {
+      const info = this.findSdkCall(initializer);
       const nameNode = declaration.getNameNode();
-      if (!Node.isIdentifier(nameNode)) continue;
-      const initializer = declaration.getInitializer();
-      if (!initializer) continue;
-      if (this.isStripeConstructorCall(unwrapExpression(initializer))) {
-        this.clientNames.add(nameNode.getText());
+      if (Node.isIdentifier(nameNode) && info) {
+        this.derived.set(nameNode.getText(), {
+          parts: info.parts,
+          ...(info.operation === undefined ? {} : { operation: info.operation }),
+        });
       }
-    }
-
-    for (const assignment of this.sourceFile.getDescendantsOfKind(SyntaxKind.BinaryExpression)) {
-      if (assignment.getOperatorToken().getKind() !== SyntaxKind.EqualsToken) continue;
-      const left = assignment.getLeft();
-      if (!Node.isIdentifier(left)) continue;
-      if (this.isStripeConstructorCall(unwrapExpression(assignment.getRight()))) {
-        this.clientNames.add(left.getText());
-      }
-    }
-  }
-
-  private collectDerivedNames(): void {
-    for (const declaration of allVariableDeclarations(this.sourceFile)) {
-      if (!Node.isIdentifier(declaration.getNameNode())) continue;
-      const initializer = declaration.getInitializer();
-      if (!initializer) continue;
-      if (this.containsStripeCall(initializer)) {
-        this.derivedNames.add(declaration.getName());
-      }
-    }
-  }
-
-  private scanCalls(): void {
-    for (const call of this.sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
-      if (!this.isStripeSdkCall(call)) continue;
-      const callee = call.getExpression();
-      if (!Node.isPropertyAccessExpression(callee)) continue;
-
-      const chain = propertyChain(callee);
-      const operation = chain.slice(1).join('.');
-      const position = call.getStart();
-      const snippet = call.getText().slice(0, MAX_SNIPPET_LENGTH);
-
-      for (const argument of call.getArguments()) {
-        const extraction = this.extractArgument(argument);
-        for (const issue of extraction.issues) this.recordDynamicSite(issue);
-        for (const field of extraction.fields) {
-          for (const change of this.fieldChanges) {
-            if (!segmentsEqual(field.segments, toPathSegments(change.path ?? ''))) continue;
-            this.addFinding({
-              change,
-              position,
-              operation,
-              kind: 'sdk_call',
-              fieldPath: field.segments,
-              confidence: field.confidence,
-              snippet,
-              reason: `Stripe SDK call "${operation}" sets "${field.segments.join(
-                '.',
-              )}", which matches the changed field.`,
-            });
-          }
+      if (Node.isObjectBindingPattern(nameNode) && info) {
+        for (const element of nameNode.getElements()) {
+          const name = bindingPropertyName(element);
+          if (name === undefined) continue;
+          this.derived.set(name, {
+            parts: info.parts,
+            ...(info.operation === undefined ? {} : { operation: info.operation }),
+          });
         }
       }
     }
+
+    for (const assignment of sourceFile.getDescendantsOfKind(SyntaxKind.BinaryExpression)) {
+      if (assignment.getOperatorToken().getKind() !== SyntaxKind.EqualsToken) continue;
+      const left = assignment.getLeft();
+      if (!Node.isIdentifier(left)) continue;
+      const info = this.findSdkCall(assignment.getRight());
+      if (!info) continue;
+      this.derived.set(left.getText(), {
+        parts: info.parts,
+        ...(info.operation === undefined ? {} : { operation: info.operation }),
+      });
+    }
   }
 
-  private scanPropertyAccess(): void {
-    for (const property of this.sourceFile.getDescendantsOfKind(
-      SyntaxKind.PropertyAccessExpression,
-    )) {
-      const parent = property.getParent();
-      if (Node.isPropertyAccessExpression(parent) && parent.getExpression() === property) continue;
-
-      const chain = propertyChain(property);
-      const root = chain[0];
-      if (root === undefined || !this.derivedNames.has(root)) continue;
-      const segments = chain.slice(1);
-      if (segments.length === 0) continue;
-
-      for (const change of this.fieldChanges) {
-        if (!segmentsEqual(segments, toPathSegments(change.path ?? ''))) continue;
-        this.addFinding({
-          change,
-          position: property.getStart(),
-          operation: 'field_access',
-          kind: 'sdk_field',
-          fieldPath: segments,
-          confidence: 'medium',
-          snippet: property.getText().slice(0, MAX_SNIPPET_LENGTH),
-          reason: `Property "${segments.join(
-            '.',
-          )}" is read from a value returned by a Stripe SDK call and matches the changed field.`,
-        });
+  private collectEventNarrowing(): void {
+    for (const [name, eventType] of this.options.facts.typeGuardEvents) {
+      this.eventTypes.set(name, eventType);
+    }
+    for (const call of this.options.sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+      const expression = call.getExpression();
+      if (!Node.isIdentifier(expression)) continue;
+      const eventType = this.eventTypes.get(expression.getText());
+      if (!eventType) continue;
+      const [argument] = call.getArguments();
+      if (argument && Node.isIdentifier(argument)) {
+        this.eventTypes.set(argument.getText(), eventType);
       }
     }
   }
 
-  private scanDestructuredBindings(): void {
-    for (const declaration of allVariableDeclarations(this.sourceFile)) {
-      const nameNode = declaration.getNameNode();
-      if (!Node.isObjectBindingPattern(nameNode)) continue;
-      const initializer = declaration.getInitializer();
-      if (!initializer || !this.containsStripeCall(initializer)) continue;
+  private scanSdkCalls(): void {
+    for (const call of this.options.sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+      const info = this.findSdkCall(call);
+      if (!info) continue;
+      if (info.parts[0] === 'webhooks' && info.parts[1] === 'constructEvent') continue;
+      if (info.operation === undefined) {
+        this.recordUnresolved({
+          kind: 'unknown_type',
+          position: call.getStart(),
+          snippet: call.getText().slice(0, MAX_SNIPPET_LENGTH),
+          reason: `Stripe SDK call "${info.parts.join('.')}" has no documented operation mapping in this version; it is not guessed.`,
+        });
+        continue;
+      }
 
-      for (const element of nameNode.getElements()) {
-        const name = bindingPropertyName(element);
-        if (name === undefined) continue;
-        for (const change of this.fieldChanges) {
-          if (!segmentsEqual([name], toPathSegments(change.path ?? ''))) continue;
-          this.addFinding({
-            change,
-            position: element.getStart(),
-            operation: 'destructured_response',
-            kind: 'sdk_field',
-            fieldPath: [name],
-            confidence: 'medium',
-            snippet: element.getText().slice(0, MAX_SNIPPET_LENGTH),
-            reason: `Property "${name}" is destructured from a Stripe SDK result and matches the changed field.`,
+      const operationText = info.parts.join('.');
+      for (const argument of call.getArguments()) {
+        const extraction = this.extractArgument(argument);
+        for (const issue of extraction.issues) this.recordUnresolved(issue);
+        for (const field of extraction.fields) {
+          this.matchField({
+            field,
+            operation: info.operation,
+            context: field.segments[0] === 'expand' ? 'expand' : 'request',
+            add: (change, matchedSegments, confidence) =>
+              this.addFinding({
+                change,
+                position: call.getStart(),
+                operation: operationText,
+                fieldPath: matchedSegments,
+                kind: 'sdk_call',
+                confidence,
+                snippet: call.getText().slice(0, MAX_SNIPPET_LENGTH),
+                reason: `Stripe SDK call "${operationText}" sets "${joinPath(matchedSegments)}", which matches the changed ${describeChange(change)}.`,
+                confidenceReason:
+                  confidence === 'high'
+                    ? 'The SDK receiver and object-literal key are statically resolved.'
+                    : 'The object literal was resolved through a local identifier.',
+                ...(info.operation === undefined
+                  ? {}
+                  : { openApiOperation: info.operation.label }),
+              }),
           });
         }
       }
     }
   }
 
-  private extractArgument(argument: Node): ExtractionResult {
-    const value = unwrapExpression(argument);
-    if (Node.isSpreadElement(value)) {
-      return {
-        fields: [],
-        issues: [{ kind: 'dynamic_argument', line: value.getStartLineNumber() }],
-      };
+  private scanDestructuredBindings(): void {
+    for (const declaration of this.options.sourceFile.getDescendantsOfKind(
+      SyntaxKind.VariableDeclaration,
+    )) {
+      const nameNode = declaration.getNameNode();
+      if (!Node.isObjectBindingPattern(nameNode)) continue;
+      const initializer = declaration.getInitializer();
+      if (!initializer) continue;
+      const info = this.findSdkCall(initializer);
+      if (!info) continue;
+      for (const element of nameNode.getElements()) {
+        const name = bindingPropertyName(element);
+        if (name === undefined) continue;
+        for (const change of this.options.changes) {
+          const segments = toPathSegments(change.path ?? '');
+          const last = segments[segments.length - 1];
+          if (last !== name) continue;
+          if (change.context === 'request_parameter') continue;
+          if (change.eventType !== undefined && change.path !== 'data.previous_attributes') continue;
+          if (
+            (change.context === 'request' || change.context === 'response') &&
+            (info.operation === undefined || !operationMatchesChange(change, info.operation))
+          ) {
+            continue;
+          }
+          this.addFinding({
+            change,
+            position: element.getStart(),
+            operation: info.parts.join('.'),
+            fieldPath: [name],
+            kind: 'sdk_field',
+            confidence: 'high',
+            snippet: element.getText().slice(0, MAX_SNIPPET_LENGTH),
+            reason: `Property "${name}" is destructured from a Stripe SDK result and matches the changed ${describeChange(change)}.`,
+            confidenceReason:
+              'The binding comes directly from a statically identified Stripe SDK call.',
+            ...(info.operation === undefined ? {} : { openApiOperation: info.operation.label }),
+          });
+        }
+      }
     }
-    if (Node.isObjectLiteralExpression(value)) {
-      return extractLiteral(value, 'high');
+  }
+
+  private scanPropertyAccess(): void {
+    for (const property of this.options.sourceFile.getDescendantsOfKind(
+      SyntaxKind.PropertyAccessExpression,
+    )) {
+      const parent = property.getParent();
+      if (Node.isPropertyAccessExpression(parent) && parent.getExpression() === property) continue;
+      const chain = propertyChain(property, this.options.facts.constructorNames);
+      const derivedRoot = this.longestRoot(chain, this.derived);
+      const typedRoot = this.longestRoot(chain, this.options.facts.typedNames);
+
+      if (derivedRoot) {
+        const segments = chain.slice(derivedRoot.length);
+        if (segments.length > 0) {
+          const value = this.derived.get(derivedRoot.text);
+          for (const change of this.options.changes) {
+            if (!fieldMatches(change, segments, value?.operation, 'response')) continue;
+            if (change.kind === 'field_became_required') continue;
+            this.addFinding({
+              change,
+              position: property.getStart(),
+              operation: value?.parts.join('.') ?? 'sdk_result',
+              fieldPath: segments,
+              kind: 'sdk_field',
+              confidence: 'high',
+              snippet: property.getText().slice(0, MAX_SNIPPET_LENGTH),
+              reason: `Property "${joinPath(segments)}" is read from a Stripe SDK result and matches the changed ${describeChange(change)}.`,
+              confidenceReason:
+                'The property chain starts from a value assigned directly from a Stripe SDK call.',
+              ...(value?.operation === undefined ? {} : { openApiOperation: value.operation.label }),
+            });
+          }
+        }
+      }
+
+      if (typedRoot && !derivedRoot) {
+        const resource = this.options.facts.typedNames.get(typedRoot.text);
+        if (!resource || resource === 'Event') continue;
+        const segments = chain.slice(typedRoot.length);
+        if (segments.length === 0) continue;
+        for (const change of this.options.changes) {
+          if (change.context !== 'schema' || change.resource !== resource) continue;
+          if (!exactSegmentsMatch(segments, toPathSegments(change.path ?? ''))) continue;
+          if (change.kind === 'field_became_required') continue;
+          if (!this.changeOperationMatchesResource(change, resource)) continue;
+          this.addFinding({
+            change,
+            position: property.getStart(),
+            operation: `typed.${resource}`,
+            fieldPath: segments,
+            kind: 'typed_field',
+            confidence: 'medium',
+            snippet: property.getText().slice(0, MAX_SNIPPET_LENGTH),
+            reason: `Property "${joinPath(segments)}" is read from a value typed as Stripe.${resource} and matches the changed field.`,
+            confidenceReason:
+              'The type annotation identifies a Stripe model, but the value may come from any source.',
+            ...(operationForResource(resource) === undefined
+              ? {}
+              : { openApiOperation: operationForResource(resource) }),
+          });
+        }
+      }
     }
-    if (Node.isIdentifier(value)) {
-      const resolved = resolveObjectLiteral(value, this.sourceFile);
-      if (resolved) return extractLiteral(resolved, 'medium');
-      if (value.getText() === 'undefined') return { fields: [], issues: [] };
-      return {
-        fields: [],
-        issues: [{ kind: 'dynamic_argument', line: value.getStartLineNumber() }],
-      };
+  }
+
+  private scanWebhookSwitches(): void {
+    for (const statement of this.options.sourceFile.getDescendantsOfKind(
+      SyntaxKind.SwitchStatement,
+    )) {
+      const root = this.eventRoot(statement);
+      if (!root) continue;
+      for (const clause of statement.getClauses()) {
+        if (!Node.isCaseClause(clause)) continue;
+        const expression = clause.getExpression();
+        if (!expression || !Node.isStringLiteral(expression)) {
+          this.recordUnresolved({
+            kind: 'dynamic_webhook_case',
+            position: clause.getStart(),
+            snippet: clause.getText().slice(0, MAX_SNIPPET_LENGTH),
+            reason: 'A webhook switch case is not a string literal, so its event type is unresolved.',
+          });
+          continue;
+        }
+        const eventType = expression.getLiteralValue();
+        if (!EVENT_TYPE.test(eventType)) continue;
+        this.eventTypes.set(root, eventType);
+        for (const property of clause.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression)) {
+          const parent = property.getParent();
+          if (Node.isPropertyAccessExpression(parent) && parent.getExpression() === property) {
+            continue;
+          }
+          const chain = propertyChain(property, this.options.facts.constructorNames);
+          if (chain[0] !== root) continue;
+          const segments = chain.slice(1);
+          if (!segments.includes('object') && !segments.includes('previous_attributes')) continue;
+          for (const change of this.options.changes) {
+            if (!this.webhookChangeApplies(change, eventType)) continue;
+            if (!suffixSegmentsMatch(segments, toPathSegments(change.path ?? ''))) continue;
+            this.addFinding({
+              change,
+              position: property.getStart(),
+              operation: `webhook ${eventType}`,
+              fieldPath: segments,
+              kind: change.path === 'data.previous_attributes' ? 'webhook_handler' : 'sdk_field',
+              confidence: 'high',
+              snippet: property.getText().slice(0, MAX_SNIPPET_LENGTH),
+              reason: `Webhook case "${eventType}" reads "${joinPath(segments)}", which matches the changed ${describeChange(change)}.`,
+              confidenceReason:
+                'The event type is a literal switch case and the property chain is statically resolved.',
+              openApiOperation: `webhook ${eventType}`,
+            });
+          }
+        }
+      }
     }
-    if (isPrimitiveLiteral(value)) return { fields: [], issues: [] };
-    if (
-      Node.isCallExpression(value) ||
-      Node.isElementAccessExpression(value) ||
-      Node.isPropertyAccessExpression(value) ||
-      Node.isNewExpression(value) ||
-      Node.isAwaitExpression(value)
-    ) {
-      return {
-        fields: [],
-        issues: [{ kind: 'dynamic_argument', line: value.getStartLineNumber() }],
-      };
+
+    for (const property of this.options.sourceFile.getDescendantsOfKind(
+      SyntaxKind.PropertyAccessExpression,
+    )) {
+      const parent = property.getParent();
+      if (Node.isPropertyAccessExpression(parent) && parent.getExpression() === property) continue;
+      const chain = propertyChain(property, this.options.facts.constructorNames);
+      const root = chain[0];
+      if (!root) continue;
+      const eventType = this.eventTypes.get(root);
+      if (!eventType) continue;
+      const segments = chain.slice(1);
+      if (!segments.includes('object') && !segments.includes('previous_attributes')) continue;
+      for (const change of this.options.changes) {
+        if (!this.webhookChangeApplies(change, eventType)) continue;
+        if (!suffixSegmentsMatch(segments, toPathSegments(change.path ?? ''))) continue;
+        this.addFinding({
+          change,
+          position: property.getStart(),
+          operation: `webhook ${eventType}`,
+          fieldPath: segments,
+          kind: 'sdk_field',
+          confidence: 'medium',
+          snippet: property.getText().slice(0, MAX_SNIPPET_LENGTH),
+          reason: `A value narrowed to webhook "${eventType}" reads "${joinPath(segments)}", which matches the changed ${describeChange(change)}.`,
+          confidenceReason:
+            'A type guard names the event type, but narrowing is inferred from the guard rather than a literal case.',
+          openApiOperation: `webhook ${eventType}`,
+        });
+      }
     }
-    return { fields: [], issues: [] };
   }
 
-  private isStripeConstructorCall(node: Node): boolean {
-    return Node.isNewExpression(node) && this.isStripeConstructor(node.getExpression());
-  }
-
-  private isStripeConstructor(node: Node): boolean {
-    const text = node.getText();
-    for (const name of this.constructorNames) {
-      if (text === name || text.startsWith(`${name}.`)) return true;
+  private scanDynamicSites(): void {
+    for (const element of this.options.sourceFile.getDescendantsOfKind(
+      SyntaxKind.ElementAccessExpression,
+    )) {
+      const chain = propertyChain(element, this.options.facts.constructorNames);
+      const root = this.longestRoot(chain, this.options.facts.clientNames);
+      const argument = element.getArgumentExpression();
+      if (!root || !argument || Node.isStringLiteral(argument)) continue;
+      this.recordUnresolved({
+        kind: 'dynamic_call',
+        position: element.getStart(),
+        snippet: element.getText().slice(0, MAX_SNIPPET_LENGTH),
+        reason: `Dynamic member "${element.getText().slice(0, 80)}" on a known Stripe receiver cannot be mapped to an OpenAPI operation statically.`,
+      });
     }
-    return false;
+
+    for (const call of this.options.sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+      const expression = call.getExpression();
+      if (!Node.isIdentifier(expression) || expression.getText() !== 'fetch') continue;
+      const [argument] = call.getArguments();
+      if (!argument || !Node.isStringLiteral(argument)) continue;
+      const url = argument.getLiteralValue();
+      if (!url.includes('/v1/')) continue;
+      this.recordUnresolved({
+        kind: 'rest_call',
+        position: call.getStart(),
+        snippet: call.getText().slice(0, MAX_SNIPPET_LENGTH),
+        reason: `Direct REST call to "${url}" bypasses the SDK call mapping, so its body fields are not verified.`,
+      });
+    }
   }
 
-  private isStripeSdkCall(call: CallExpression): boolean {
-    const callee = call.getExpression();
-    if (!Node.isPropertyAccessExpression(callee)) return false;
-    const root = stripeReceiverRoot(callee.getExpression(), this.constructorNames);
-    return root !== undefined && (root === INLINE_STRIPE_CLIENT || this.clientNames.has(root));
-  }
-
-  private containsStripeCall(node: Node): boolean {
-    if (Node.isCallExpression(node) && this.isStripeSdkCall(node)) return true;
-    return node
-      .getDescendantsOfKind(SyntaxKind.CallExpression)
-      .some((call) => this.isStripeSdkCall(call));
-  }
-
-  private recordDynamicSite(issue: ExtractionIssue): void {
-    const label = issue.kind.replaceAll('_', ' ');
-    this.dynamicSites.push(`${this.relativeFile}:${issue.line} (${label})`);
-  }
-
-  private addFinding(input: {
-    change: ChangeRecord;
-    position: number;
-    operation: string;
-    kind: ImpactFinding['callSite']['kind'];
-    fieldPath: string[];
-    confidence: Confidence;
-    snippet: string;
-    reason: string;
+  private matchField(input: {
+    field: ExtractedField;
+    operation?: SdkOperation;
+    context: FieldContext;
+    add: (
+      change: ChangeRecord,
+      matchedSegments: string[],
+      confidence: Confidence,
+    ) => void;
   }): void {
-    const { line, column } = this.sourceFile.getLineAndColumnAtPos(input.position);
+    for (const change of this.options.changes) {
+      if (change.kind === 'enum_value_removed') {
+        if (input.field.value === undefined || input.field.value !== change.oldValue) continue;
+      }
+      if (input.context === 'expand') {
+        if (change.path !== input.field.segments[1]) continue;
+        if (input.operation && change.operation && !operationMatchesChange(change, input.operation)) {
+          continue;
+        }
+      } else if (!fieldMatches(change, input.field.segments, input.operation, input.context)) {
+        continue;
+      }
+      input.add(change, input.field.segments, input.field.confidence);
+    }
+  }
+
+  private addFinding(input: FindingInput): void {
+    const { line, column } = this.options.sourceFile.getLineAndColumnAtPos(input.position);
     this.findings.push({
       changeId: input.change.id,
       callSite: {
-        file: this.file,
+        file: this.options.file,
         line,
         column,
         operation: input.operation,
+        ...(input.openApiOperation === undefined
+          ? {}
+          : { openApiOperation: input.openApiOperation }),
         fieldPath: [...input.fieldPath],
         kind: input.kind,
         snippet: input.snippet,
       },
       confidence: input.confidence,
       reason: input.reason,
+      confidenceReason: input.confidenceReason,
     });
+  }
+
+  private recordUnresolved(input: {
+    kind: UnresolvedKind;
+    position: number;
+    snippet: string;
+    reason: string;
+  }): void {
+    const { line, column } = this.options.sourceFile.getLineAndColumnAtPos(input.position);
+    this.unresolved.push({
+      file: this.options.file,
+      line,
+      column,
+      kind: input.kind,
+      snippet: input.snippet,
+      reason: input.reason,
+      relatedChangeIds: relatedChangeIds(this.options.allChanges, input.snippet),
+    });
+  }
+
+  private findSdkCall(node: Node): SdkCallInfo | undefined {
+    const calls =
+      Node.isCallExpression(node)
+        ? [node]
+        : node.getDescendantsOfKind(SyntaxKind.CallExpression);
+    for (const call of calls) {
+      const callee = call.getExpression();
+      if (!Node.isPropertyAccessExpression(callee)) continue;
+      const chain = propertyChain(callee, this.options.facts.constructorNames);
+      const root = this.longestRoot(chain, this.options.facts.clientNames);
+      if (!root) continue;
+      const parts = chain.slice(root.length);
+      if (parts.length < 2) continue;
+      const matchedOperation = mapSdkOperation(parts);
+      return {
+        call,
+        root,
+        parts,
+        ...(matchedOperation === undefined ? {} : { operation: matchedOperation }),
+      };
+    }
+    return undefined;
+  }
+
+  private extractArgument(argument: Node): ExtractionResult {
+    const value = unwrap(argument);
+    if (Node.isSpreadElement(value)) {
+      return {
+        fields: [],
+        issues: [
+          {
+            kind: 'spread_argument',
+            line: value.getStartLineNumber(),
+            column: 1,
+            snippet: value.getText().slice(0, MAX_SNIPPET_LENGTH),
+          },
+        ],
+      };
+    }
+    if (Node.isObjectLiteralExpression(value)) return extractLiteral(value, 'high');
+    if (Node.isIdentifier(value)) {
+      const resolved = this.resolveObjectLiteral(value.getText());
+      if (resolved) return extractLiteral(resolved, 'medium');
+      if (value.getText() === 'undefined') return { fields: [], issues: [] };
+      return {
+        fields: [],
+        issues: [
+          {
+            kind: 'spread_argument',
+            line: value.getStartLineNumber(),
+            column: 1,
+            snippet: value.getText().slice(0, MAX_SNIPPET_LENGTH),
+          },
+        ],
+      };
+    }
+    return { fields: [], issues: [] };
+  }
+
+  private resolveObjectLiteral(name: string, seen = new Set<string>()): ObjectLiteralExpression | undefined {
+    if (seen.has(name)) return undefined;
+    seen.add(name);
+    for (const declaration of this.options.sourceFile.getDescendantsOfKind(
+      SyntaxKind.VariableDeclaration,
+    )) {
+      if (declaration.getName() !== name) continue;
+      const initializer = declaration.getInitializer();
+      if (!initializer) return undefined;
+      const value = unwrap(initializer);
+      if (Node.isObjectLiteralExpression(value)) return value;
+      if (Node.isIdentifier(value)) return this.resolveObjectLiteral(value.getText(), seen);
+      return undefined;
+    }
+    return undefined;
+  }
+
+  private longestRoot<T>(chain: string[], names: ReadonlyMap<string, T>): ClientRoot | undefined {
+    for (let length = chain.length - 1; length >= 1; length -= 1) {
+      const text = chain.slice(0, length).join('.');
+      if (names.has(text) || text === INLINE_CLIENT) return { text, length };
+    }
+    return undefined;
+  }
+
+  private eventRoot(statement: SwitchStatement): string | undefined {
+    const expression = statement.getExpression();
+    if (!Node.isPropertyAccessExpression(expression) || expression.getName() !== 'type') {
+      return undefined;
+    }
+    const target = expression.getExpression();
+    return Node.isIdentifier(target) ? target.getText() : undefined;
+  }
+
+  private changeOperationMatchesResource(change: ChangeRecord, resource: string): boolean {
+    if (change.operation === undefined) return true;
+    const expected = operationForResource(resource);
+    return expected === undefined || normalizeOperation(change.operation) === expected;
+  }
+
+  private webhookChangeApplies(change: ChangeRecord, eventType: string): boolean {
+    if (change.eventType === eventType || change.context === 'webhook_event') return true;
+    return change.context === 'schema' && change.resource === 'Customer';
   }
 }
 
@@ -386,41 +708,53 @@ function extractFields(
 ): void {
   for (const property of literal.getProperties()) {
     if (Node.isSpreadAssignment(property)) {
-      issues.push({ kind: 'spread', line: property.getStartLineNumber() });
+      issues.push({
+        kind: 'spread_argument',
+        line: property.getStartLineNumber(),
+        column: 1,
+        snippet: property.getText().slice(0, MAX_SNIPPET_LENGTH),
+      });
       continue;
     }
-
-    let name: string | undefined;
-    let value: Node | undefined;
-    if (Node.isPropertyAssignment(property)) {
-      const nameNode = property.getNameNode();
-      if (Node.isComputedPropertyName(nameNode)) {
-        issues.push({ kind: 'computed_key', line: property.getStartLineNumber() });
-        continue;
-      }
-      name = propertyName(nameNode);
-      value = property.getInitializer();
-    } else if (Node.isShorthandPropertyAssignment(property)) {
-      name = property.getName();
-    } else {
+    if (!Node.isPropertyAssignment(property) && !Node.isShorthandPropertyAssignment(property)) {
       continue;
     }
+    const nameNode = Node.isPropertyAssignment(property) ? property.getNameNode() : undefined;
+    if (nameNode && Node.isComputedPropertyName(nameNode)) {
+      issues.push({
+        kind: 'dynamic_call',
+        line: property.getStartLineNumber(),
+        column: 1,
+        snippet: nameNode.getText().slice(0, MAX_SNIPPET_LENGTH),
+      });
+      continue;
+    }
+    const name = nameNode
+      ? propertyName(nameNode)
+      : Node.isShorthandPropertyAssignment(property)
+        ? property.getName()
+        : undefined;
     if (name === undefined) continue;
-
     const segments = [...prefix, name];
-    fields.push({ segments, confidence });
-    if (value === undefined) continue;
-
-    const unwrapped = unwrapExpression(value);
-    if (Node.isObjectLiteralExpression(unwrapped)) {
-      extractFields(unwrapped, confidence, segments, fields, issues);
+    const initializer = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
+    fields.push({
+      segments,
+      confidence,
+      ...(literalValue(initializer) === undefined ? {} : { value: literalValue(initializer) }),
+    });
+    if (!initializer) continue;
+    const value = unwrap(initializer);
+    if (Node.isObjectLiteralExpression(value)) {
+      extractFields(value, confidence, segments, fields, issues);
       continue;
     }
-    if (Node.isArrayLiteralExpression(unwrapped)) {
+    if (Node.isArrayLiteralExpression(value)) {
       fields.push({ segments: [...segments, '[]'], confidence });
-      for (const element of unwrapped.getElements()) {
-        const item = unwrapExpression(element);
-        if (Node.isObjectLiteralExpression(item)) {
+      for (const element of value.getElements()) {
+        const item = unwrap(element);
+        if (Node.isStringLiteral(item)) {
+          fields.push({ segments: [...segments, item.getLiteralValue()], confidence });
+        } else if (Node.isObjectLiteralExpression(item)) {
           extractFields(item, confidence, [...segments, '[]'], fields, issues);
         }
       }
@@ -428,71 +762,57 @@ function extractFields(
   }
 }
 
-function resolveObjectLiteral(
-  expression: Node,
-  sourceFile: SourceFile,
-  seen: Set<string> = new Set<string>(),
-): ObjectLiteralExpression | undefined {
-  const value = unwrapExpression(expression);
-  if (Node.isObjectLiteralExpression(value)) return value;
-  if (!Node.isIdentifier(value)) return undefined;
-
-  const name = value.getText();
-  if (seen.has(name)) return undefined;
-  seen.add(name);
-
-  const declaration = allVariableDeclarations(sourceFile).find(
-    (candidate) => candidate.getName() === name,
-  );
-  const initializer = declaration?.getInitializer();
-  if (!initializer) return undefined;
-  return resolveObjectLiteral(initializer, sourceFile, seen);
+function literalValue(node: Node | undefined): string | undefined {
+  if (!node) return undefined;
+  const value = unwrap(node);
+  if (Node.isStringLiteral(value) || Node.isNoSubstitutionTemplateLiteral(value)) {
+    return value.getLiteralValue();
+  }
+  if (Node.isNumericLiteral(value) || Node.isBigIntLiteral(value)) return value.getText();
+  if (Node.isTrueLiteral(value)) return 'true';
+  if (Node.isFalseLiteral(value)) return 'false';
+  if (Node.isNullLiteral(value)) return 'null';
+  return undefined;
 }
 
-function stripeReceiverRoot(node: Node, constructorNames: Set<string>): string | undefined {
-  let current: Node = node;
-  for (;;) {
-    if (
-      Node.isPropertyAccessExpression(current) ||
-      Node.isElementAccessExpression(current) ||
-      Node.isCallExpression(current) ||
-      Node.isNonNullExpression(current) ||
-      Node.isParenthesizedExpression(current) ||
-      Node.isAwaitExpression(current)
-    ) {
-      current = current.getExpression();
-      continue;
-    }
-    if (
-      Node.isNewExpression(current) &&
-      isStripeConstructorText(current.getExpression(), constructorNames)
-    ) {
-      return INLINE_STRIPE_CLIENT;
-    }
-    if (Node.isIdentifier(current)) return current.getText();
-    return undefined;
+function fieldMatches(
+  change: ChangeRecord,
+  segments: string[],
+  operation: SdkOperation | undefined,
+  context: FieldContext,
+): boolean {
+  if (change.eventType !== undefined || change.context === 'webhook_event') return false;
+  if (!exactSegmentsMatch(segments, toPathSegments(change.path ?? ''))) return false;
+  if (change.operation !== undefined || context === 'request' || context === 'response') {
+    if (operation === undefined) return false;
+    return operationMatchesChange(change, operation);
   }
+  return true;
 }
 
-function isStripeConstructorText(node: Node, constructorNames: Set<string>): boolean {
-  const text = node.getText();
-  for (const name of constructorNames) {
-    if (text === name || text.startsWith(`${name}.`)) return true;
-  }
-  return false;
+function exactSegmentsMatch(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((segment, index) => segment === right[index]);
 }
 
-function propertyChain(node: Node): string[] {
-  const segments: string[] = [];
-  let current: Node = node;
-  while (Node.isPropertyAccessExpression(current)) {
-    segments.unshift(current.getName());
-    current = current.getExpression();
-  }
-  if (Node.isIdentifier(current) || Node.isThisExpression(current)) {
-    segments.unshift(current.getText());
-  }
-  return segments;
+function suffixSegmentsMatch(left: string[], right: string[]): boolean {
+  if (left.length === 0 || right.length === 0) return false;
+  const shorter = left.length <= right.length ? left : right;
+  const longer = left.length <= right.length ? right : left;
+  const offset = longer.length - shorter.length;
+  return shorter.every((segment, index) => segment === longer[offset + index]);
+}
+
+function operationForResource(resource: string): string | undefined {
+  const map: Record<string, string> = {
+    Customer: 'GET /v1/customers/{customer}',
+    PaymentIntent: 'GET /v1/payment_intents/{intent}',
+    Subscription: 'GET /v1/subscriptions/{subscription}',
+  };
+  return map[resource];
+}
+
+function normalizeOperation(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
 function propertyName(node: Node): string | undefined {
@@ -514,13 +834,62 @@ function bindingPropertyName(element: BindingElement): string | undefined {
   return Node.isIdentifier(nameNode) ? nameNode.getText() : undefined;
 }
 
-function unwrapExpression(node: Node): Node {
+function propertyChain(node: Node, constructorNames: ReadonlySet<string>): string[] {
+  const segments: string[] = [];
   let current: Node = node;
+  for (;;) {
+    if (Node.isPropertyAccessExpression(current)) {
+      segments.unshift(current.getName());
+      current = current.getExpression();
+      continue;
+    }
+    if (Node.isElementAccessExpression(current)) {
+      const argument = current.getArgumentExpression();
+      const name = argument && Node.isStringLiteral(argument) ? argument.getLiteralValue() : '[dynamic]';
+      segments.unshift(name);
+      current = current.getExpression();
+      continue;
+    }
+    if (
+      Node.isParenthesizedExpression(current) ||
+      Node.isAsExpression(current) ||
+      Node.isNonNullExpression(current) ||
+      Node.isSatisfiesExpression(current) ||
+      Node.isAwaitExpression(current)
+    ) {
+      current = current.getExpression();
+      continue;
+    }
+    if (Node.isIdentifier(current)) {
+      segments.unshift(current.getText());
+      return segments;
+    }
+    if (Node.isThisExpression(current)) {
+      segments.unshift('this');
+      return segments;
+    }
+    if (Node.isNewExpression(current)) {
+      const text = current.getExpression().getText();
+      const isStripe = [...constructorNames].some(
+        (name) => text === name || text.startsWith(`${name}.`),
+      );
+      if (isStripe) {
+        segments.unshift(INLINE_CLIENT);
+        return segments;
+      }
+    }
+    return segments;
+  }
+}
+
+function unwrap(node: Node): Node {
+  let current = node;
   for (;;) {
     if (
       Node.isParenthesizedExpression(current) ||
       Node.isAsExpression(current) ||
       Node.isNonNullExpression(current) ||
+      Node.isSatisfiesExpression(current) ||
       Node.isAwaitExpression(current)
     ) {
       current = current.getExpression();
@@ -530,41 +899,71 @@ function unwrapExpression(node: Node): Node {
   }
 }
 
-function isRequireStripe(call: CallExpression): boolean {
-  const expression = call.getExpression();
-  if (!Node.isIdentifier(expression) || expression.getText() !== 'require') return false;
-  const [argument] = call.getArguments();
-  return (
-    argument !== undefined &&
-    Node.isStringLiteral(argument) &&
-    argument.getLiteralValue() === STRIPE_MODULE
-  );
-}
-
-function isPrimitiveLiteral(node: Node): boolean {
-  return (
-    Node.isStringLiteral(node) ||
-    Node.isNumericLiteral(node) ||
-    Node.isBigIntLiteral(node) ||
-    Node.isTrueLiteral(node) ||
-    Node.isFalseLiteral(node) ||
-    Node.isNullLiteral(node) ||
-    Node.isNoSubstitutionTemplateLiteral(node) ||
-    Node.isRegularExpressionLiteral(node) ||
-    Node.isArrayLiteralExpression(node)
-  );
-}
-
-function allVariableDeclarations(sourceFile: SourceFile): VariableDeclaration[] {
-  return sourceFile.getDescendantsOfKind(SyntaxKind.VariableDeclaration);
-}
-
 function toPathSegments(path: string): string[] {
   return path.replaceAll('[]', '.[]').split('.').filter(Boolean);
 }
 
-function segmentsEqual(left: string[], right: string[]): boolean {
-  return left.length === right.length && left.every((segment, index) => segment === right[index]);
+function joinPath(segments: string[]): string {
+  return segments.join('.').replaceAll('.[]', '[]');
+}
+
+function describeChange(change: ChangeRecord): string {
+  const context = change.context ?? 'schema';
+  return `${context} change (${change.kind})`;
+}
+
+function relatedChangeIds(changes: ChangeRecord[], snippet: string): string[] {
+  const lower = snippet.toLowerCase();
+  return changes
+    .filter((change) => {
+      if (change.path === undefined) return false;
+      const tokens = toPathSegments(change.path).filter((token) => token !== '[]');
+      return tokens.some((token) => lower.includes(token.toLowerCase()));
+    })
+    .slice(0, 20)
+    .map((change) => change.id);
+}
+
+function buildNeedsHumanItem(change: ChangeRecord): NeedsHumanItem {
+  const operation = change.operation === undefined ? '' : ` for ${change.operation}`;
+  const eventType = change.eventType === undefined ? '' : ` for ${change.eventType}`;
+  return {
+    changeId: change.id,
+    kind: change.kind,
+    context: change.context ?? 'schema',
+    resource: change.resource,
+    ...(change.path === undefined ? {} : { path: change.path }),
+    reason: `No static call-site mapping is defined for ${change.kind}${operation}${eventType}; review manually. Check callers, defaults, validation, and tests.`,
+  };
+}
+
+function buildCoverageNotes(
+  needsHuman: NeedsHumanItem[],
+  unresolved: UnresolvedItem[],
+  sourceFileCount: number,
+): string[] {
+  const extensions = [...SOURCE_EXTENSIONS].sort().join(', ');
+  const ignored = [...IGNORED_DIRECTORIES].sort().join(', ');
+  const notes = [
+    `${sourceFileCount} source file(s) scanned; extensions inspected: ${extensions}; ignored directories: ${ignored}.`,
+    'Type annotations are read textually; project path aliases and generated code are not resolved. Dynamic SDK calls, REST fetch calls, and runtime values are not considered verified coverage.',
+  ];
+  if (sourceFileCount === 0) {
+    notes.push('No source files were scanned. An empty result is not evidence of complete coverage.');
+  }
+  if (needsHuman.length > 0) {
+    const kinds = [...new Set(needsHuman.map((item) => item.kind))].sort().join(', ');
+    notes.push(
+      `${needsHuman.length} change(s) (${kinds}) have no static call-site mapping and need human review.`,
+    );
+  }
+  if (unresolved.length > 0) {
+    const kinds = [...new Set(unresolved.map((item) => item.kind))].sort().join(', ');
+    notes.push(
+      `${unresolved.length} unresolved site(s) (${kinds}) were recorded, including spread and dynamic arguments.`,
+    );
+  }
+  return notes;
 }
 
 function dedupeFindings(findings: ImpactFinding[]): ImpactFinding[] {
@@ -586,6 +985,18 @@ function dedupeFindings(findings: ImpactFinding[]): ImpactFinding[] {
   return result;
 }
 
+function dedupeUnresolved(items: UnresolvedItem[]): UnresolvedItem[] {
+  const seen = new Set<string>();
+  const result: UnresolvedItem[] = [];
+  for (const item of items) {
+    const key = [item.file, item.line, item.column, item.kind, item.snippet].join('|');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
 function compareFindings(left: ImpactFinding, right: ImpactFinding): number {
   return (
     left.callSite.file.localeCompare(right.callSite.file) ||
@@ -596,30 +1007,14 @@ function compareFindings(left: ImpactFinding, right: ImpactFinding): number {
   );
 }
 
-function buildCoverageNotes(changes: ChangeRecord[], dynamicSites: string[]): string[] {
-  const notes = [
-    'Dynamic Stripe SDK calls, reflection, REST fetch calls, generated code, and vendor code are not considered verified coverage.',
-  ];
-
-  if (changes.length > 0) {
-    const kinds = [...new Set(changes.map((change) => change.kind))].sort().join(', ');
-    notes.push(
-      `${changes.length} change(s) (${kinds}) are resource-level and cannot be mapped to call sites from static AST analysis.`,
-    );
-  }
-
-  if (dynamicSites.length > 0) {
-    const uniqueSites = [...new Set(dynamicSites)].sort();
-    const shown = uniqueSites.slice(0, MAX_REPORTED_DYNAMIC_SITES);
-    const remainder = uniqueSites.length - shown.length;
-    notes.push(
-      `Dynamic or spread Stripe SDK arguments were not analyzed at ${shown.join(', ')}${
-        remainder > 0 ? ` and ${remainder} more site(s)` : ''
-      }.`,
-    );
-  }
-
-  return notes;
+function compareUnresolved(left: UnresolvedItem, right: UnresolvedItem): number {
+  return (
+    left.file.localeCompare(right.file) ||
+    left.line - right.line ||
+    left.column - right.column ||
+    left.kind.localeCompare(right.kind) ||
+    left.snippet.localeCompare(right.snippet)
+  );
 }
 
 async function collectSourceFiles(root: string): Promise<string[]> {
@@ -646,4 +1041,8 @@ async function collectSourceFiles(root: string): Promise<string[]> {
 
 function toPosixPath(path: string): string {
   return path.split(sep).join('/');
+}
+
+function normalizePath(path: string): string {
+  return path.replaceAll('\\', '/').toLowerCase();
 }

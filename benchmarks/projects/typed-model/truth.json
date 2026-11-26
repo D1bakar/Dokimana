@@ -1,0 +1,19 @@
+{
+  "findings": [
+    {
+      "file": "src/models.ts",
+      "fieldPath": "balance",
+      "operation": "GET /v1/customers/{customer}",
+      "kind": "sdk_field",
+      "confidence": "medium"
+    },
+    {
+      "file": "src/models.ts",
+      "fieldPath": "email",
+      "operation": "GET /v1/customers/{customer}",
+      "kind": "sdk_field",
+      "confidence": "medium"
+    }
+  ],
+  "unresolved": []
+}

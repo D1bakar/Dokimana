@@ -1,0 +1,12 @@
+{
+  "findings": [
+    {
+      "file": "src/handler.ts",
+      "fieldPath": "phone",
+      "operation": "webhook customer.created",
+      "kind": "sdk_field",
+      "confidence": "high"
+    }
+  ],
+  "unresolved": []
+}

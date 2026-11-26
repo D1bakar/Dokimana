@@ -96,7 +96,6 @@ export class Verifier {
       classification: 'could_not_run',
       reason,
       container,
-      executedAt: new Date().toISOString(),
     };
   }
 }

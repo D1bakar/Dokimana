@@ -21,6 +21,14 @@
   "bin": {
     "dokimana": "./dist/src/cli.js"
   },
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "files": [
+    "dist/src",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/D1bakar/Dokimana.git"
@@ -35,6 +43,8 @@
     "start": "node dist/src/cli.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "benchmark": "tsx scripts/benchmark.ts",
+    "bench": "tsx scripts/accuracy-bench.ts",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write \"**/*.{ts,json,yml,yaml,md}\"",
     "format:check": "prettier --check \"**/*.{ts,json,yml,yaml,md}\""

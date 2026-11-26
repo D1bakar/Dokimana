@@ -1,55 +1,339 @@
-name: Dokimana
-description: Compare Stripe OpenAPI files and report affected call sites
+name: Dokimana API change check
+description: Compare Stripe OpenAPI specs, trace affected TypeScript call sites, and report evidence on pull requests.
+author: D1bakar
+branding:
+  icon: git-pull-request
+  color: blue
+
 inputs:
-  repo:
-    description: Repository root relative to the checked-out workspace
-    required: false
-    default: .
   old-openapi:
-    description: Path to the old structured OpenAPI JSON, relative to the workspace
+    description: Workspace-relative path to the baseline structured OpenAPI JSON.
     required: true
   new-openapi:
-    description: Path to the new structured OpenAPI JSON, relative to the workspace
+    description: Workspace-relative path to the candidate structured OpenAPI JSON.
     required: true
   old-version:
-    description: Label used when the old OpenAPI document has no info.version
+    description: Version label reported for the baseline spec when it has no info.version.
     required: true
   new-version:
-    description: Label used when the new OpenAPI document has no info.version
+    description: Version label reported for the candidate spec when it has no info.version.
     required: true
-  impact-output:
-    description: Impact JSON output path, relative to the workspace; its parent directory must exist
+  repo:
+    description: Workspace-relative repository root to scan for TypeScript and JavaScript call sites.
     required: false
-    default: dokimana-impact.json
-  report-output:
-    description: Markdown evidence report path, relative to the workspace; its parent directory must exist
-    required: false
-    default: dokimana-evidence.md
+    default: '.'
   fail-on-changes:
-    description: Fail the Action after writing reports when one or more structural changes are found
+    description: 'Fail when any structural change is detected: "true" or "false".'
+    required: false
+    default: 'false'
+  fail-on:
+    description: 'Fail when a finding meets this confidence: high, medium, low, or none.'
+    required: false
+    default: 'none'
+  format:
+    description: 'Primary report format: json, markdown, sarif, or html. JSON and Markdown are always generated.'
+    required: false
+    default: 'markdown'
+  comment:
+    description: 'Post or update one sticky pull request comment with the summary. No-op outside pull requests.'
+    required: false
+    default: 'false'
+  upload-artifacts:
+    description: Upload the generated JSON, Markdown, SARIF, and HTML reports as a workflow artifact.
     required: false
     default: 'true'
+  upload-sarif:
+    description: 'Upload SARIF to code scanning. Requires permissions: security-events: write and actions: read.'
+    required: false
+    default: 'false'
+  base-ref:
+    description: 'Git ref supplying the baseline spec via git show. Empty compares workspace files directly.'
+    required: false
+    default: ''
+  head-ref:
+    description: Git ref recorded as the candidate source in the sticky comment. The candidate spec is read from the workspace.
+    required: false
+    default: HEAD
+
+outputs:
+  changes:
+    description: Number of structural changes detected.
+    value: ${{ steps.metadata.outputs.changes }}
+  findings:
+    description: Number of affected call-site findings.
+    value: ${{ steps.metadata.outputs.findings }}
+  unresolved:
+    description: Number of unresolved call sites recorded by the scanner.
+    value: ${{ steps.metadata.outputs.unresolved }}
+  report-path:
+    description: Workspace-relative path to the JSON impact report.
+    value: ${{ steps.metadata.outputs.report-path }}
+  sarif-path:
+    description: Workspace-relative path to the SARIF report, or empty when not generated.
+    value: ${{ steps.metadata.outputs.sarif-path }}
+  html-path:
+    description: Workspace-relative path to the HTML report, or empty when not generated.
+    value: ${{ steps.metadata.outputs.html-path }}
+  summary:
+    description: One-line summary of changes, findings, and unresolved call sites.
+    value: ${{ steps.metadata.outputs.summary }}
+
 runs:
-  using: docker
-  image: Dockerfile
-  args:
-    - scan
-    - --repo
-    - /github/workspace/${{ inputs.repo }}
-    - --old
-    - /github/workspace/${{ inputs.old-openapi }}
-    - --new
-    - /github/workspace/${{ inputs.new-openapi }}
-    - --old-version
-    - ${{ inputs.old-version }}
-    - --new-version
-    - ${{ inputs.new-version }}
-    - --json
-    - /github/workspace/${{ inputs.impact-output }}
-    - --markdown
-    - /github/workspace/${{ inputs.report-output }}
-    - --fail-on-changes
-    - ${{ inputs.fail-on-changes }}
-branding:
-  icon: book
-  color: blue
+  using: composite
+  steps:
+    - name: Validate inputs and scan
+      id: scan
+      shell: bash
+      env:
+        DOKIMANA_CLI: ${{ github.action_path }}/dist/src/cli.js
+        INPUT_REPO: ${{ inputs.repo }}
+        INPUT_OLD_OPENAPI: ${{ inputs.old-openapi }}
+        INPUT_NEW_OPENAPI: ${{ inputs.new-openapi }}
+        INPUT_OLD_VERSION: ${{ inputs.old-version }}
+        INPUT_NEW_VERSION: ${{ inputs.new-version }}
+        INPUT_FAIL_ON_CHANGES: ${{ inputs.fail-on-changes }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_UPLOAD_SARIF: ${{ inputs.upload-sarif }}
+        INPUT_BASE_REF: ${{ inputs.base-ref }}
+        INPUT_HEAD_REF: ${{ inputs.head-ref }}
+      run: |
+        set -uo pipefail
+
+        stop_with() {
+          echo "DOKIMANA_SCAN_STATUS=$1" >> "$GITHUB_ENV"
+          exit 0
+        }
+        fail() {
+          echo "::error::$2" >&2
+          stop_with "$1"
+        }
+        require_bool() {
+          case "$2" in
+            true|false) ;;
+            *) fail 2 "$1 must be true or false." ;;
+          esac
+        }
+
+        require_bool fail-on-changes "$INPUT_FAIL_ON_CHANGES"
+        require_bool upload-sarif "$INPUT_UPLOAD_SARIF"
+        case "$INPUT_FAIL_ON" in
+          high|medium|low|none) ;;
+          *) fail 2 'fail-on must be high, medium, low, or none.' ;;
+        esac
+        case "$INPUT_FORMAT" in
+          json|markdown|sarif|html) ;;
+          *) fail 2 'format must be json, markdown, sarif, or html.' ;;
+        esac
+
+        if [ ! -f "$DOKIMANA_CLI" ]; then
+          fail 2 "Built CLI not found at $DOKIMANA_CLI. Build the action before using a local checkout."
+        fi
+        if [ -z "$INPUT_OLD_OPENAPI" ] || [ -z "$INPUT_NEW_OPENAPI" ]; then
+          fail 2 'old-openapi and new-openapi must be non-empty paths.'
+        fi
+
+        workspace="${GITHUB_WORKSPACE%/}"
+        repo_dir="$workspace/$INPUT_REPO"
+        new_spec="$workspace/$INPUT_NEW_OPENAPI"
+        old_spec="$workspace/$INPUT_OLD_OPENAPI"
+        if [ ! -d "$repo_dir" ]; then
+          fail 2 "Repository root does not exist: $INPUT_REPO"
+        fi
+        if [ ! -f "$new_spec" ]; then
+          fail 2 "Candidate spec does not exist: $INPUT_NEW_OPENAPI"
+        fi
+
+        if [ -n "$INPUT_BASE_REF" ]; then
+          if ! git -C "$workspace" rev-parse --verify "${INPUT_BASE_REF}^{commit}" > /dev/null 2>&1; then
+            fail 2 "base-ref is not a commit in this checkout: $INPUT_BASE_REF"
+          fi
+          if [ -n "$INPUT_HEAD_REF" ] && ! git -C "$workspace" rev-parse --verify "${INPUT_HEAD_REF}^{commit}" > /dev/null 2>&1; then
+            fail 2 "head-ref is not a commit in this checkout: $INPUT_HEAD_REF"
+          fi
+        fi
+
+        tmp_dir="$(node --input-type=module -e 'import { mkdtempSync } from "node:fs"; import { tmpdir } from "node:os"; import { join } from "node:path"; console.log(mkdtempSync(join(process.env.RUNNER_TEMP || tmpdir(), "dokimana-action-")))')" || fail 2 'Unable to create a temporary directory.'
+        cleanup() {
+          node --input-type=module -e 'import { rmSync } from "node:fs"; rmSync(process.argv[1], { recursive: true, force: true })' "$tmp_dir" > /dev/null 2>&1 || true
+        }
+        trap cleanup EXIT
+
+        node --input-type=module -e 'import { copyFileSync, mkdirSync } from "node:fs"; import { join } from "node:path"; mkdirSync(join(process.argv[1], "specs"), { recursive: true }); copyFileSync(process.argv[2], join(process.argv[1], "specs", "new-openapi.json"));' "$tmp_dir" "$new_spec" || fail 2 'Unable to stage the candidate spec.'
+
+        if [ -n "$INPUT_BASE_REF" ]; then
+          if ! git -C "$workspace" show "${INPUT_BASE_REF}:${INPUT_OLD_OPENAPI}" > "$tmp_dir/specs/old-openapi.json" 2> /dev/null; then
+            fail 2 "Unable to read old-openapi from base-ref: $INPUT_BASE_REF:$INPUT_OLD_OPENAPI"
+          fi
+          old_spec="$tmp_dir/specs/old-openapi.json"
+          new_spec="$tmp_dir/specs/new-openapi.json"
+        elif [ ! -f "$old_spec" ]; then
+          fail 2 "Baseline spec does not exist: $INPUT_OLD_OPENAPI"
+        fi
+
+        report_json="$workspace/dokimana-impact.json"
+        report_markdown="$workspace/dokimana-evidence.md"
+        report_sarif="$workspace/dokimana.sarif"
+        report_html="$workspace/dokimana-report.html"
+
+        args=(scan --repo "$repo_dir" --old "$old_spec" --new "$new_spec" --old-version "$INPUT_OLD_VERSION" --new-version "$INPUT_NEW_VERSION" --json "$report_json" --markdown "$report_markdown")
+        if [ "$INPUT_FORMAT" = "sarif" ] || [ "$INPUT_FORMAT" = "html" ] || [ "$INPUT_UPLOAD_SARIF" = "true" ]; then
+          args+=(--sarif "$report_sarif")
+        fi
+        if [ "$INPUT_FORMAT" = "html" ]; then
+          args+=(--html "$report_html")
+        fi
+        if [ "$INPUT_FAIL_ON" != "none" ]; then
+          args+=(--fail-on "$INPUT_FAIL_ON")
+        fi
+        if [ "$INPUT_FAIL_ON_CHANGES" = "true" ]; then
+          args+=(--fail-on-changes true)
+        fi
+
+        node "$DOKIMANA_CLI" "${args[@]}"
+        status=$?
+        echo "DOKIMANA_SCAN_STATUS=$status" >> "$GITHUB_ENV"
+
+    - name: Set outputs and prepare comment
+      id: metadata
+      if: always()
+      shell: bash
+      env:
+        REPORT_JSON: ${{ github.workspace }}/dokimana-impact.json
+        REPORT_SARIF: ${{ github.workspace }}/dokimana.sarif
+        REPORT_HTML: ${{ github.workspace }}/dokimana-report.html
+        COMMENT_FILE: ${{ runner.temp }}/dokimana-comment.md
+        INPUT_BASE_REF: ${{ inputs.base-ref }}
+        INPUT_HEAD_REF: ${{ inputs.head-ref }}
+        INPUT_FORMAT: ${{ inputs.format }}
+      run: |
+        set -uo pipefail
+        node --input-type=module - <<'NODE'
+        import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+
+        const count = (value) => (Array.isArray(value) ? value.length : 0);
+        let changes = 0;
+        let findings = 0;
+        let unresolved = 0;
+        try {
+          const impact = JSON.parse(readFileSync(process.env.REPORT_JSON, 'utf8'));
+          changes = count(impact.changes);
+          findings = count(impact.findings);
+          unresolved = count(impact.unresolved);
+        } catch (error) {
+          console.error(`Dokimana could not read the impact report: ${error instanceof Error ? error.message : error}`);
+        }
+
+        const summary = `Dokimana: ${changes} change(s), ${findings} finding(s), ${unresolved} unresolved call site(s).`;
+        const sarifGenerated = existsSync(process.env.REPORT_SARIF);
+        const htmlGenerated = existsSync(process.env.REPORT_HTML);
+        const outputs = {
+          changes: String(changes),
+          findings: String(findings),
+          unresolved: String(unresolved),
+          'report-path': 'dokimana-impact.json',
+          'sarif-path': sarifGenerated ? 'dokimana.sarif' : '',
+          'html-path': htmlGenerated ? 'dokimana-report.html' : '',
+          summary,
+        };
+        for (const [key, value] of Object.entries(outputs)) {
+          appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
+        }
+        console.log(summary);
+
+        const escape = (value) => String(value ?? '').replace(/[\r\n]+/g, ' ').replace(/`/g, "'");
+        const artifactUrl = `/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}#artifacts`;
+        const files = ['dokimana-impact.json', 'dokimana-evidence.md'];
+        if (sarifGenerated) files.push('dokimana.sarif');
+        if (htmlGenerated) files.push('dokimana-report.html');
+        const body = [
+          '<!-- dokimana-action -->',
+          '## Dokimana API change check',
+          '',
+          summary,
+          '',
+          `- Format: \`${escape(process.env.INPUT_FORMAT)}\``,
+          `- Base: \`${escape(process.env.INPUT_BASE_REF || 'workspace files')}\``,
+          `- Head: \`${escape(process.env.INPUT_HEAD_REF)}\``,
+          `- Reports: [workflow artifacts](${artifactUrl}) — ${files.map((file) => `\`${file}\``).join(', ')}`,
+          '',
+          '_Static evidence only. No live Stripe calls or repository code execution were used._',
+          '',
+        ].join('\n');
+        writeFileSync(process.env.COMMENT_FILE, body);
+        NODE
+
+    - name: Upload reports
+      if: ${{ always() && inputs.upload-artifacts == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: dokimana-reports
+        path: |
+          dokimana-impact.json
+          dokimana-evidence.md
+          dokimana.sarif
+          dokimana-report.html
+        if-no-files-found: warn
+        retention-days: 7
+
+    - name: Upload SARIF to code scanning
+      if: ${{ always() && inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: dokimana.sarif
+        category: dokimana
+
+    - name: Post or update sticky PR comment
+      if: ${{ always() && inputs.comment == 'true' && github.event_name == 'pull_request' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        COMMENT_FILE: ${{ runner.temp }}/dokimana-comment.md
+        PAYLOAD_FILE: ${{ runner.temp }}/dokimana-comment-payload.json
+      run: |
+        set -uo pipefail
+        post_status=0
+        if [ -z "${PR_NUMBER:-}" ]; then
+          echo '::warning::No pull request number available; skipping comment.'
+          exit 0
+        fi
+
+        api="repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments"
+        ids_file="$RUNNER_TEMP/dokimana-comment-ids.txt"
+        if gh api "$api" --paginate --jq 'map(select((.body // "") | contains("<!-- dokimana-action -->"))) | .[0].id // empty' > "$ids_file"; then
+          comment_id=''
+          while IFS= read -r line; do
+            if [ -n "$line" ]; then comment_id="$line"; fi
+          done < "$ids_file"
+        else
+          echo '::warning::Unable to list existing pull request comments.'
+          post_status=1
+          comment_id=''
+        fi
+
+        node --input-type=module -e 'import { readFileSync, writeFileSync } from "node:fs"; writeFileSync(process.argv[1], JSON.stringify({ body: readFileSync(process.argv[2], "utf8") }));' "$PAYLOAD_FILE" "$COMMENT_FILE" || post_status=1
+
+        if [ "$post_status" -eq 0 ]; then
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" --input "$PAYLOAD_FILE" > /dev/null || post_status=1
+          else
+            gh api --method POST "$api" --input "$PAYLOAD_FILE" > /dev/null || post_status=1
+          fi
+        fi
+        if [ "$post_status" -ne 0 ]; then
+          echo '::warning::Dokimana could not post or update the pull request comment.'
+        fi
+        echo "DOKIMANA_POST_STATUS=$post_status" >> "$GITHUB_ENV"
+
+    - name: Enforce scan result
+      if: always()
+      shell: bash
+      run: |
+        status="${DOKIMANA_SCAN_STATUS:-0}"
+        post="${DOKIMANA_POST_STATUS:-0}"
+        if [ "$status" = "0" ] && [ "$post" != "0" ]; then status="$post"; fi
+        if [ "$status" != "0" ]; then
+          echo "::error::Dokimana exited with status $status." >&2
+        fi
+        exit "$status"

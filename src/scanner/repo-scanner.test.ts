@@ -7,7 +7,6 @@ const source: ProviderSource = {
   kind: 'openapi',
   provider: 'stripe',
   version: 'fixture',
-  fetchedAt: new Date(0).toISOString(),
   checksumSha256: 'fixture',
 };
 
@@ -83,6 +82,12 @@ describe('RepoScanner', () => {
     expect(report.unverifiedCallSiteCoverage.some((note) => note.includes('spread'))).toBe(true);
   });
 
+  it('reports the full operation for an inline Stripe client', async () => {
+    const report = await scanFixture('inline', [change('legacy_name')]);
+    expect(report.findings).toHaveLength(1);
+    expect(report.findings[0]?.callSite.operation).toBe('customers.update');
+  });
+
   it('detects Stripe clients created through require()', async () => {
     const report = await scanFixture('require', [change('legacy_name')]);
     expect(report.findings).toHaveLength(1);
@@ -94,11 +99,27 @@ describe('RepoScanner', () => {
     expect(report.findings).toHaveLength(0);
   });
 
-  it('does not map resource-level changes to call sites and says so', async () => {
+  it('records resource-level changes as needs_human instead of guessing call sites', async () => {
     const report = await scanFixture('positive', [change('get', 'endpoint_removed')]);
     expect(report.findings).toHaveLength(0);
-    expect(report.unverifiedCallSiteCoverage.some((note) => note.includes('resource-level'))).toBe(
-      true,
-    );
+    expect(report.needsHuman).toHaveLength(1);
+    expect(report.needsHuman[0]).toMatchObject({
+      kind: 'endpoint_removed',
+      resource: 'Customer',
+      reason: expect.stringContaining('review manually'),
+    });
+    expect(
+      report.unverifiedCallSiteCoverage.some((note) => note.includes('need human review')),
+    ).toBe(true);
+  });
+
+  it('states which source extensions and ignored directories were used', async () => {
+    const report = await scanFixture('positive', [change('legacy_name')]);
+    expect(
+      report.unverifiedCallSiteCoverage.some((note) => note.includes('extensions inspected')),
+    ).toBe(true);
+    expect(
+      report.unverifiedCallSiteCoverage.some((note) => note.includes('ignored directories')),
+    ).toBe(true);
   });
 });

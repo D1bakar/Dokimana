@@ -9,8 +9,11 @@ Dokimana is a local command-line tool for one job: compare two Stripe OpenAPI JS
 
 ## What it does
 
-- Compares the old and new documents for removed fields, type changes, new required fields, and removed enum values.
-- Reads the repository's source files and reports likely call sites for each change.
+- Compares old and new documents for removed fields, type changes, new required fields, removed enum values, and expandable-field changes.
+- Resolves local JSON Pointer `$ref` values, including nested and circular references, across schemas, parameters, request bodies, responses, and webhooks.
+- Interprets `allOf`, `anyOf`, `oneOf`, `nullable`, `x-expandableFields`, `x-expansionResources`, and `additionalProperties`.
+- Labels each finding as a schema, operation, request parameter, request body, response, or webhook event change.
+- Reads the repository's source files and reports likely call sites for supported field-level changes.
 - Writes a JSON file with the raw results and a Markdown file written for code review.
 - Runs locally, including in CI through the included GitHub Action.
 
@@ -18,12 +21,13 @@ A finding is a lead to check, not proof that something will fail. A clean result
 
 ## Current limits
 
-Be clear about what this version does not do:
+This version deliberately stays inside these boundaries:
 
-- It does not download Stripe specifications or call the Stripe API.
+- A scan does not download specifications or call the Stripe API.
+- It does not follow external or remote `$ref` values; only local JSON Pointers are resolved.
 - It does not run your application scenarios. `verify` reports `could_not_run` and exits unsuccessfully.
 - It does not prove runtime behavior or complete coverage.
-- It does not invent replacement fields. Unsupported changes return `needs_human`.
+- It does not invent replacement fields. Unsupported changes are listed as `needs_human` in the report.
 - It does not change your source files.
 - It does not handle external JSON references, dynamic client construction, direct REST calls, or generated and vendor code.
 
@@ -58,6 +62,27 @@ npm start -- scan \
 
 Add `--fail-on-changes true` to exit with status 1 when changes are found. Both files are written before that check runs.
 
+The repository also includes two trimmed-down excerpts from the real Stripe spec shape at
+`src/diff/fixtures/stripe-real-old.json` and `src/diff/fixtures/stripe-real-new.json`. Use them to exercise schema, request-parameter, request-body, response, and webhook diffs without network access.
+
+### Fetch a pinned spec (optional)
+
+`scan` never fetches anything. If you want to obtain a public spec yourself, the separate
+`fetch-spec` command requires an exact API version and a full `stripe/openapi` commit SHA.
+It downloads a pinned file from GitHub, checks the reported version, and writes a `.sha256`
+sidecar next to the output.
+
+```bash
+npm start -- fetch-spec \
+  --version 2026-11-18.endive \
+  --commit 0f6d4dfafe157c10df393ce8a27d00b186ab3955 \
+  --out stripe-openapi.json
+```
+
+The command does not use a Stripe key or call the Stripe API. Review the commit and checksum
+before using the file as a scan input. Use `--channel preview` or `--channel openapi` only when
+you know which repository directory you need; the default is `latest`.
+
 Create a Markdown report from an existing impact file:
 
 ```bash
@@ -72,7 +97,7 @@ Check key safety and verification status:
 
 ```bash
 npm start -- doctor
-npm start -- verify --repo . --scenario ./scenario.json --json verification.json
+npm start -- verify --repo . --scenario src/verifier/fixtures/scenario.json --json verification.json
 ```
 
 A valid scenario still returns `could_not_run` until a real isolated runner exists. Do not read that result as a passed test.
@@ -95,10 +120,10 @@ The four version and path inputs are required. `repo`, `impact-output`, `report-
 
 ## Safety
 
-- Live Stripe keys are refused. Only test-mode keys are accepted where a key is checked.
-- All reads and writes stay local.
+- Live Stripe keys are refused before repository work. Only test-mode keys are accepted where a key is checked.
+- Scans read and write only local files. `fetch-spec` is the sole network command and is never called by a scan.
 - No repository code is executed by this version.
-- Tests use synthetic files and no credentials.
+- Tests use local fixture files and no credentials.
 
 ## Repository layout
 

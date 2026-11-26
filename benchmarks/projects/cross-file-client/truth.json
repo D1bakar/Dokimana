@@ -1,0 +1,19 @@
+{
+  "findings": [
+    {
+      "file": "src/usage.ts",
+      "fieldPath": "tax_exempt",
+      "operation": "POST /v1/customers",
+      "kind": "sdk_call",
+      "confidence": "high"
+    },
+    {
+      "file": "src/usage.ts",
+      "fieldPath": "account_balance",
+      "operation": "GET /v1/customers/{customer}",
+      "kind": "sdk_field",
+      "confidence": "high"
+    }
+  ],
+  "unresolved": []
+}

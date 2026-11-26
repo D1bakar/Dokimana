@@ -45,6 +45,7 @@ describe('Verifier', () => {
       network: 'not_run',
       secrets: 'none',
     });
+    expect(result.executedAt).toBeUndefined();
   });
 
   it('compares both API versions only through the container execution port', async () => {

@@ -1,0 +1,10 @@
+{
+  "findings": [],
+  "unresolved": [
+    {
+      "file": "src/rest-client.ts",
+      "kind": "rest_call",
+      "reason": "Direct fetch to /v1/customers bypasses the Stripe SDK, so the JSON body fields are not statically mapped to an SDK call."
+    }
+  ]
+}

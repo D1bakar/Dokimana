@@ -1,0 +1,132 @@
+[
+  {
+    "id": "cross-file-client",
+    "files": ["fixtures/call-sites/cross-file-client.ts"],
+    "pattern": "Stripe client exported for use from another module",
+    "expectation": "unresolved"
+  },
+  {
+    "id": "cross-file-use",
+    "files": [
+      "fixtures/call-sites/cross-file-client.ts",
+      "fixtures/call-sites/cross-file-use.ts"
+    ],
+    "pattern": "Imported client used in a different file",
+    "expectation": "unresolved"
+  },
+  {
+    "id": "destructured-response",
+    "files": ["fixtures/call-sites/destructured-response.ts"],
+    "pattern": "Changed fields destructured from an SDK list response",
+    "expectation": "finding"
+  },
+  {
+    "id": "direct-client",
+    "files": ["fixtures/call-sites/direct-client.ts"],
+    "pattern": "Direct client construction with literal create and update fields",
+    "expectation": "finding"
+  },
+  {
+    "id": "dynamic-call",
+    "files": ["fixtures/call-sites/dynamic-call.ts"],
+    "pattern": "Method name resolved at runtime rather than statically",
+    "expectation": "unresolved"
+  },
+  {
+    "id": "expand-array",
+    "files": ["fixtures/call-sites/expand-array.ts"],
+    "pattern": "Expand array entries in a retrieve call",
+    "expectation": "unresolved"
+  },
+  {
+    "id": "helper-wrapper",
+    "files": ["fixtures/call-sites/helper-wrapper.ts"],
+    "pattern": "Helper parameter used as the Stripe client",
+    "expectation": "unresolved"
+  },
+  {
+    "id": "injected-client",
+    "files": ["fixtures/call-sites/injected-client.ts"],
+    "pattern": "Client injected through a class constructor",
+    "expectation": "unresolved"
+  },
+  {
+    "id": "nested-object",
+    "files": ["fixtures/call-sites/nested-object.ts"],
+    "pattern": "Optional nested fields on an SDK result",
+    "expectation": "finding"
+  },
+  {
+    "id": "optional-chain",
+    "files": ["fixtures/call-sites/optional-chain.ts"],
+    "pattern": "Optional chaining on SDK and non-SDK shaped values",
+    "expectation": "mixed"
+  },
+  {
+    "id": "reexport-client",
+    "files": [
+      "fixtures/call-sites/singleton-client.ts",
+      "fixtures/call-sites/reexport-client.ts"
+    ],
+    "pattern": "Singleton client re-exported from a barrel module",
+    "expectation": "unresolved"
+  },
+  {
+    "id": "reexport-use",
+    "files": [
+      "fixtures/call-sites/singleton-client.ts",
+      "fixtures/call-sites/reexport-client.ts",
+      "fixtures/call-sites/reexport-use.ts"
+    ],
+    "pattern": "Re-exported singleton client used from another module",
+    "expectation": "unresolved"
+  },
+  {
+    "id": "request-body-field",
+    "files": ["fixtures/call-sites/request-body-field.ts"],
+    "pattern": "Literal enum and string fields in a create request",
+    "expectation": "finding"
+  },
+  {
+    "id": "response-property",
+    "files": ["fixtures/call-sites/response-property.ts"],
+    "pattern": "Changed field read directly from a retrieved customer",
+    "expectation": "finding"
+  },
+  {
+    "id": "rest-fetch",
+    "files": ["fixtures/call-sites/rest-fetch.ts"],
+    "pattern": "Direct REST call outside the Stripe SDK",
+    "expectation": "unresolved"
+  },
+  {
+    "id": "singleton-client",
+    "files": ["fixtures/call-sites/singleton-client.ts"],
+    "pattern": "Shared Stripe singleton definition for the re-export case",
+    "expectation": "unresolved"
+  },
+  {
+    "id": "spread-argument",
+    "files": ["fixtures/call-sites/spread-argument.ts"],
+    "pattern": "Spread objects and spread arguments passed to a Stripe call",
+    "expectation": "mixed"
+  },
+  {
+    "id": "typed-variable",
+    "files": ["fixtures/call-sites/typed-variable.ts"],
+    "pattern": "Typed Stripe values whose provenance is not an SDK call",
+    "expectation": "unresolved"
+  },
+  {
+    "id": "webhook-handler",
+    "files": ["fixtures/call-sites/webhook-handler.ts"],
+    "pattern": "constructEvent with customer.created switch narrowing",
+    "expectation": "finding"
+  },
+  {
+    "id": "webhook-switch-object",
+    "files": ["fixtures/call-sites/webhook-switch-object.ts"],
+    "pattern": "customer.updated case narrowing with changed-field access",
+    "expectation": "finding"
+  }
+]

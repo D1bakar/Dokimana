@@ -4,9 +4,16 @@ export interface ProviderSource {
   kind: 'openapi' | 'changelog';
   provider: Provider;
   version: string;
-  fetchedAt: string;
   checksumSha256: string;
 }
+
+export type ChangeContext =
+  | 'schema'
+  | 'operation'
+  | 'request_parameter'
+  | 'request_body'
+  | 'response'
+  | 'webhook_event';
 
 export type ChangeKind =
   | 'field_removed'
@@ -14,20 +21,28 @@ export type ChangeKind =
   | 'field_type_changed'
   | 'field_became_required'
   | 'schema_removed'
+  | 'expandable_field_removed'
+  | 'expandable_target_removed'
   | 'parameter_removed'
   | 'parameter_renamed'
   | 'parameter_became_required'
   | 'parameter_type_changed'
   | 'parameter_enum_value_removed'
+  | 'request_body_removed'
+  | 'response_removed'
   | 'endpoint_removed'
+  | 'webhook_removed'
   | 'enum_value_removed';
 
 export interface ChangeRecord {
   id: string;
   provider: Provider;
   kind: ChangeKind;
+  context?: ChangeContext;
   resource: string;
   path?: string;
+  operation?: string;
+  eventType?: string;
   oldValue: string;
   newValue?: string;
   breaking: true;
@@ -35,21 +50,60 @@ export interface ChangeRecord {
   evidence: string;
 }
 
+export type CallSiteKind =
+  | 'sdk_call'
+  | 'sdk_field'
+  | 'typed_field'
+  | 'expand_array'
+  | 'webhook_handler'
+  | 'helper_wrapper';
+
 export interface CallSite {
   file: string;
   line: number;
   column: number;
   operation: string;
+  openApiOperation?: string;
   fieldPath: string[];
-  kind: 'sdk_call' | 'sdk_field';
+  kind: CallSiteKind;
   snippet: string;
 }
+
+export type Confidence = 'high' | 'medium' | 'low';
 
 export interface ImpactFinding {
   changeId: string;
   callSite: CallSite;
-  confidence: 'high' | 'medium';
+  confidence: Confidence;
   reason: string;
+  confidenceReason: string;
+}
+
+export interface NeedsHumanItem {
+  changeId: string;
+  kind: ChangeKind;
+  context?: ChangeContext;
+  resource: string;
+  path?: string;
+  reason: string;
+}
+
+export type UnresolvedKind =
+  | 'dynamic_call'
+  | 'rest_call'
+  | 'spread_argument'
+  | 'unresolved_import'
+  | 'unknown_type'
+  | 'dynamic_webhook_case';
+
+export interface UnresolvedItem {
+  file: string;
+  line: number;
+  column: number;
+  kind: UnresolvedKind;
+  snippet: string;
+  reason: string;
+  relatedChangeIds: string[];
 }
 
 export interface ImpactReport {
@@ -57,6 +111,8 @@ export interface ImpactReport {
   root: string;
   changes: ChangeRecord[];
   findings: ImpactFinding[];
+  needsHuman: NeedsHumanItem[];
+  unresolved: UnresolvedItem[];
   unverifiedCallSiteCoverage: string[];
 }
 
@@ -85,16 +141,18 @@ export interface VerificationResult {
     network: 'none' | 'restricted' | 'not_run';
     secrets: 'none';
   };
-  executedAt: string;
+  executedAt?: string;
 }
 
 export interface EvidenceReport {
   generatedAt: string;
   repository: string;
   providerVersion: string;
-  impactCoverage: 'verified' | 'partially_verified' | 'unverified';
+  impactAnalysis: 'static_evidence' | 'none';
   changes: ChangeRecord[];
   findings: ImpactFinding[];
+  needsHuman: NeedsHumanItem[];
+  unresolved?: UnresolvedItem[];
   verification: VerificationResult[];
   limitations: string[];
 }

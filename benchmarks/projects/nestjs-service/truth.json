@@ -1,0 +1,26 @@
+{
+  "findings": [
+    {
+      "file": "src/customer.service.ts",
+      "fieldPath": "email",
+      "operation": "POST /v1/customers",
+      "kind": "sdk_call",
+      "confidence": "high"
+    },
+    {
+      "file": "src/customer.service.ts",
+      "fieldPath": "invoice_prefix",
+      "operation": "POST /v1/customers",
+      "kind": "sdk_call",
+      "confidence": "high"
+    },
+    {
+      "file": "src/customer.service.ts",
+      "fieldPath": "tax_exempt",
+      "operation": "POST /v1/customers",
+      "kind": "sdk_call",
+      "confidence": "high"
+    }
+  ],
+  "unresolved": []
+}

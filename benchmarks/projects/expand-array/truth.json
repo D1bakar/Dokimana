@@ -1,0 +1,12 @@
+{
+  "findings": [
+    {
+      "file": "src/retrieve-customer.ts",
+      "fieldPath": "expand: default_source",
+      "operation": "GET /v1/customers/{customer}",
+      "kind": "expand_array",
+      "confidence": "high"
+    }
+  ],
+  "unresolved": []
+}

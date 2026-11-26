@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { ChangeRecord, ImpactReport } from '../domain/types.js';
-import { buildEvidenceReport, renderMarkdownReport, renderTerminalReport } from './reporter.js';
+import {
+  assertImpactReport,
+  buildEvidenceReport,
+  renderMarkdownReport,
+  renderTerminalReport,
+} from './reporter.js';
 
 const source = {
   kind: 'openapi' as const,
   provider: 'stripe' as const,
   version: 'fixture',
-  fetchedAt: '2025-01-01T00:00:00.000Z',
   checksumSha256: 'fixture',
 };
 
@@ -14,6 +18,7 @@ function change(overrides: Partial<ChangeRecord> = {}): ChangeRecord {
   return {
     id: 'change_fixture',
     provider: 'stripe',
+    context: 'schema',
     kind: 'field_removed',
     resource: 'Customer|<img src=x onerror=alert(1)>',
     path: 'status\n## forged heading',
@@ -31,6 +36,8 @@ function impact(changes: ChangeRecord[]): ImpactReport {
     root: '/workspace/repo',
     changes,
     findings: [],
+    needsHuman: [],
+    unresolved: [],
     unverifiedCallSiteCoverage: [],
   };
 }
@@ -46,7 +53,13 @@ describe('renderMarkdownReport', () => {
       }),
     );
 
+    expect(report).toContain('## Summary');
+    expect(report).toContain('## By severity');
+    expect(report).toContain('## By resource');
+    expect(report).toContain('## Limits of this scan');
     expect(report).toContain('## Structured Changes');
+    expect(report).toContain('| Context | Change | Resource | Path | Old value | New value | Evidence |');
+    expect(report).toContain('schema');
     expect(report).toContain('field_removed');
     expect(report).toContain('Customer&#124;&lt;img src=x onerror=alert(1)&gt;');
     expect(report).toContain('status ## forged heading');
@@ -68,6 +81,58 @@ describe('renderMarkdownReport', () => {
 
     expect(report).toContain('_No structured changes found._');
   });
+
+  it('lists unsupported changes as needs_human', () => {
+    const input = impact([change({ kind: 'endpoint_removed' })]);
+    input.needsHuman = [
+      {
+        changeId: 'change_fixture',
+        context: 'operation',
+        kind: 'endpoint_removed',
+        resource: 'delete /v1/customers/{id}',
+        reason: 'No static call-site mapping is defined; review manually.',
+      },
+    ];
+    const report = renderMarkdownReport(
+      buildEvidenceReport({
+        repository: '/workspace/repo',
+        providerVersion: 'fixture',
+        impact: input,
+        verification: [],
+      }),
+    );
+
+    expect(report).toContain('## Needs Human Review');
+    expect(report).toContain('operation');
+    expect(report).toContain('endpoint_removed');
+    expect(report).toContain('review manually');
+  });
+
+  it('records unresolved sites instead of silently skipping them', () => {
+    const input = impact([change()]);
+    input.unresolved = [
+      {
+        file: 'src/dynamic.ts',
+        line: 8,
+        column: 3,
+        kind: 'dynamic_call',
+        snippet: 'client[method]()',
+        reason: 'Runtime method name.',
+        relatedChangeIds: ['change_fixture'],
+      },
+    ];
+    const report = renderMarkdownReport(
+      buildEvidenceReport({
+        repository: '/workspace/repo',
+        providerVersion: 'fixture',
+        impact: input,
+        verification: [],
+      }),
+    );
+    expect(report).toContain('## Unresolved Sites');
+    expect(report).toContain('dynamic_call');
+    expect(report).toContain('Runtime method name.');
+  });
 });
 
 describe('renderTerminalReport', () => {
@@ -81,8 +146,26 @@ describe('renderTerminalReport', () => {
       }),
     );
 
-    expect(report).toContain('field_removed Customer [31m.status');
+    expect(report).toContain('[schema] field_removed Customer [31m.status');
     expect(report).toContain('*bold* | `code` <script>');
     expect(report).not.toContain('\u001b');
+  });
+});
+
+describe('assertImpactReport', () => {
+  it('rejects a JSON object that is not an impact report', () => {
+    expect(() => assertImpactReport({}, 'fixture-impact.json')).toThrow(/must include/);
+  });
+
+  it('normalizes older reports without a needsHuman array', () => {
+    const value: unknown = {
+      generatedAt: '2025-01-01T00:00:00.000Z',
+      root: '/workspace/repo',
+      changes: [],
+      findings: [],
+      unverifiedCallSiteCoverage: [],
+    };
+    assertImpactReport(value, 'fixture-impact.json');
+    expect(Array.isArray((value as { needsHuman: unknown }).needsHuman)).toBe(true);
   });
 });

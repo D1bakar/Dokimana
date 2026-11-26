@@ -1,0 +1,15 @@
+{
+  "status": "pending-generation",
+  "note": "Pending generation: the site-example workflow will publish a trimmed sample evidence report here.",
+  "generatedFrom": [
+    "src/diff/fixtures/stripe-real-old.json",
+    "src/diff/fixtures/stripe-real-new.json"
+  ],
+  "summary": [],
+  "changes": [],
+  "callSites": [],
+  "needsHuman": [],
+  "verification": [],
+  "limitations": [],
+  "truncation": []
+}
