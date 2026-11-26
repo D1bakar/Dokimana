@@ -1,8 +1,8 @@
 {
-  "name": "apiproof-site",
+  "name": "dokimana-site",
   "version": "0.1.0",
   "private": true,
-  "description": "ApiProof — trace Stripe API changes to likely call sites.",
+  "description": "Dokimana — local evidence for Stripe API changes.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

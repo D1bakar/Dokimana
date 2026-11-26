@@ -22,7 +22,7 @@ export default function HomePage() {
     <div className="shell">
       <header className="masthead">
         <Link href="/" className="wordmark">
-          ApiProof
+          Dokimana
         </Link>
         <p className="masthead-note">Local evidence for Stripe API changes</p>
         <Link
@@ -49,10 +49,10 @@ export default function HomePage() {
 
         <main id="main" tabIndex={-1}>
           <article className="document">
-            <p className="document-path">readme / apiproof</p>
+            <p className="document-path">readme / dokimana</p>
             <h1>Trace Stripe API changes to the code that depends on them.</h1>
             <p className="document-intro">
-              ApiProof compares two OpenAPI documents you supply, looks for TypeScript and
+              Dokimana compares two OpenAPI documents you supply, looks for TypeScript and
               JavaScript call sites that may depend on what changed, and writes evidence for a human
               to review. It reads local files. It does not call Stripe.
             </p>
@@ -138,8 +138,8 @@ npm start -- doctor`}</Command>
   --new fixtures/stripe-new.json \\
   --old-version fixture-old \\
   --new-version fixture-new \\
-  --json apiproof-impact.json \\
-  --markdown apiproof-evidence.md`}</Command>
+  --json dokimana-impact.json \\
+  --markdown dokimana-evidence.md`}</Command>
               <p>
                 Add <code>--fail-on-changes true</code> to exit with status 1 when structural
                 changes are found. Reports are written before that gate is applied.
@@ -147,9 +147,9 @@ npm start -- doctor`}</Command>
               <p>Build a Markdown report from an existing impact file:</p>
               <Command>{`npm run dev -- report \\
   --repo . \\
-  --impact apiproof-impact.json \\
+  --impact dokimana-impact.json \\
   --provider-version fixture-new \\
-  --output apiproof-evidence.md`}</Command>
+  --output dokimana-evidence.md`}</Command>
               <p>
                 Check key safety and verification status. A valid scenario still returns{' '}
                 <code>could_not_run</code> and exits unsuccessfully until a real isolated runner
@@ -186,7 +186,7 @@ npm run dev -- verify --repo . --scenario ./scenario.json --json verification.js
       </div>
 
       <footer className="statusline">
-        <p>ApiProof · local files only · Node.js 20+ · verification: could_not_run</p>
+        <p>Dokimana · local files only · Node.js 20+ · verification: could_not_run</p>
         <Link
           href="https://github.com/D1bakar/Dokimana/blob/main/README.md"
           target="_blank"

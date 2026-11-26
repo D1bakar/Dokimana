@@ -1,23 +1,22 @@
-# ApiProof site
+# Dokimana site
 
-A single-page document site for ApiProof, built with Next.js 15 (App Router) and React 19.
+A single-page document site for Dokimana, built with Next.js 15 (App Router) and React 19.
 It is statically renderable, has no runtime backend, and ships no client-side JavaScript
 for navigation or appearance controls.
 
 ## Structure
 
-The homepage is one document with six sections: what ApiProof is, what it does, what it
+The homepage is one document with six sections: what Dokimana is, what it does, what it
 cannot do yet, setup, how to use it, and how it is different. A text contents rail links
-to each section. Former topic routes (`/method`, `/safety`, `/quickstart`, `/docs`,
-`/about`, `/contact`) redirect to the matching section or to the project issue tracker so
-existing links keep working.
+to each section. Former topic routes redirect from `next.config.mjs` to the matching
+section or to the project issue tracker, so existing links keep working without extra
+page files.
 
 ```
 app/page.tsx       document and in-page contents
 app/layout.tsx     metadata, skip link, stylesheet
 app/globals.css    all styles
 app/not-found.tsx  missing-route fallback
-app/*/page.tsx     redirects for old routes
 tests/             source-level content checks and document navigation tests
 ```
 
@@ -39,8 +38,8 @@ npm run build
 npm start
 ```
 
-`next.config.mjs` pins the tracing root to this directory and keeps type and lint errors
-fatal during builds.
+`next.config.mjs` pins the tracing root to this directory, keeps type and lint errors
+fatal during builds, and holds the old-route redirects.
 
 ## Visual system
 

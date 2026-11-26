@@ -1,4 +1,4 @@
-import type { EvidenceReport, ImpactReport, Patch, VerificationResult } from '../domain/types.js';
+import type { EvidenceReport, ImpactReport, VerificationResult } from '../domain/types.js';
 
 function terminalText(value: string): string {
   return [...value]
@@ -11,14 +11,12 @@ function terminalText(value: string): string {
 
 export function renderTerminalReport(report: EvidenceReport): string {
   const lines = [
-    `ApiProof Evidence Report`,
+    `Dokimana Evidence Report`,
     `Repository: ${terminalText(report.repository)}`,
     `Provider version: ${terminalText(report.providerVersion)}`,
     `Impact coverage: ${report.impactCoverage}`,
     `Changes: ${report.changes.length}`,
     `Affected call sites: ${report.findings.length}`,
-    `Ready patches: ${report.patches.filter((patch) => patch.status === 'ready').length}`,
-    `Needs-human patches: ${report.patches.filter((patch) => patch.status === 'needs_human').length}`,
     'Structured changes:',
   ];
   if (report.changes.length === 0) lines.push('  None');
@@ -59,7 +57,7 @@ function markdownText(value: string): string {
 
 export function renderMarkdownReport(report: EvidenceReport): string {
   const lines = [
-    '# ApiProof Breaking-Change Evidence',
+    '# Dokimana Breaking-Change Evidence',
     '',
     `- **Repository:** ${inlineCode(report.repository)}`,
     `- **Provider version:** ${inlineCode(report.providerVersion)}`,
@@ -88,16 +86,6 @@ export function renderMarkdownReport(report: EvidenceReport): string {
     );
   }
 
-  lines.push('', '## Patches', '');
-  if (report.patches.length === 0) lines.push('_No patches generated._');
-  for (const patch of report.patches) {
-    lines.push(
-      `### ${patch.status === 'ready' ? 'Ready' : 'Needs human'}: ${inlineCode(patch.id)}`,
-    );
-    lines.push('');
-    lines.push(markdownText(patch.explanation));
-  }
-
   lines.push('', '## Verification', '');
   if (report.verification.length === 0) {
     lines.push('_No scenarios ran. Verification is unverified._');
@@ -117,7 +105,6 @@ export function buildEvidenceReport(input: {
   repository: string;
   providerVersion: string;
   impact: ImpactReport;
-  patches: Patch[];
   verification: VerificationResult[];
 }): EvidenceReport {
   const coverage =
@@ -133,11 +120,10 @@ export function buildEvidenceReport(input: {
     impactCoverage: coverage,
     changes: input.impact.changes,
     findings: input.impact.findings,
-    patches: input.patches,
     verification: input.verification,
     limitations: [
       ...input.impact.unverifiedCallSiteCoverage,
-      'Live Stripe APIs and live keys are never accessed by ApiProof.',
+      'Live Stripe APIs and live keys are never accessed by Dokimana.',
     ],
   };
 }

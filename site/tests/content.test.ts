@@ -8,16 +8,9 @@ async function read(path: string) {
   return readFile(join(root, path), 'utf8')
 }
 
-const pages = [
-  'app/page.tsx',
-  'app/method/page.tsx',
-  'app/safety/page.tsx',
-  'app/quickstart/page.tsx',
-  'app/docs/page.tsx',
-  'app/about/page.tsx',
-  'app/contact/page.tsx',
-  'app/not-found.tsx',
-]
+const pages = ['app/page.tsx', 'app/not-found.tsx']
+const config = 'next.config.mjs'
+const scannedFiles = [...pages, config]
 
 describe('site content', () => {
   it('keeps only the document sections in the requested order', async () => {
@@ -57,15 +50,31 @@ describe('site content', () => {
     }
   })
 
-  it.each(pages.filter((page) => page !== 'app/page.tsx'))(
+  it.each(['app/layout.tsx', 'app/not-found.tsx'])(
     '%s exports page metadata',
     async (page) => {
       expect(await read(page)).toContain('export const metadata')
     },
   )
 
+  it('redirects old topic routes into the document', async () => {
+    const nextConfig = await read(config)
+    const redirects = [
+      ['/method', '/#what-it-does'],
+      ['/safety', '/#limits'],
+      ['/quickstart', '/#setup'],
+      ['/docs', '/#use'],
+      ['/about', '/#what-it-is'],
+      ['/contact', 'https://github.com/D1bakar/Dokimana/issues/new'],
+    ]
+    for (const [source, destination] of redirects) {
+      expect(nextConfig).toContain(`source: '${source}'`)
+      expect(nextConfig).toContain(`destination: '${destination}'`)
+    }
+  })
+
   it('does not collect secrets, load remote scripts, or use remote fonts', async () => {
-    const all = (await Promise.all(pages.map(read))).join('\n')
+    const all = (await Promise.all(scannedFiles.map(read))).join('\n')
     expect(all).not.toMatch(/sk_live_|-----BEGIN [A-Z ]*PRIVATE KEY-----/)
     expect(all).not.toMatch(/fonts\.googleapis\.com|googletagmanager|google-analytics/)
     expect(all).not.toMatch(/<script[^>]+src=/)

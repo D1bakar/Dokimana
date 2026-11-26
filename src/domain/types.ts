@@ -60,19 +60,6 @@ export interface ImpactReport {
   unverifiedCallSiteCoverage: string[];
 }
 
-export type PatchStatus = 'ready' | 'needs_human';
-
-export interface Patch {
-  id: string;
-  changeId: string;
-  status: PatchStatus;
-  file: string;
-  original: string;
-  replacement: string;
-  explanation: string;
-  confidence: 'deterministic' | 'none';
-}
-
 export interface Scenario {
   id: string;
   name: string;
@@ -108,7 +95,6 @@ export interface EvidenceReport {
   impactCoverage: 'verified' | 'partially_verified' | 'unverified';
   changes: ChangeRecord[];
   findings: ImpactFinding[];
-  patches: Patch[];
   verification: VerificationResult[];
   limitations: string[];
 }

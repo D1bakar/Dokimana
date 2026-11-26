@@ -17,7 +17,7 @@ import { Verifier } from './verifier/verifier.js';
 
 const program = new Command();
 program
-  .name('apiproof')
+  .name('dokimana')
   .description('Stripe breaking-change evidence for pull requests')
   .version('0.1.0');
 
@@ -52,7 +52,6 @@ program
         repository: resolve(options.repo),
         providerVersion: newDocument.info?.version ?? options.newVersion,
         impact,
-        patches: [],
         verification: [],
       });
       await writeFile(resolve(options.markdown), renderMarkdownReport(evidence));
@@ -106,7 +105,6 @@ program
       repository: resolve(options.repo),
       providerVersion: options.providerVersion,
       impact,
-      patches: [],
       verification: [],
     });
     await writeFile(resolve(options.output), renderMarkdownReport(evidence));

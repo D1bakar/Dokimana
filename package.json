@@ -1,15 +1,22 @@
 {
-  "name": "apiproof",
+  "name": "dokimana",
   "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "description": "CLI-first Stripe breaking-change detection and verification",
+  "description": "Local CLI for Stripe API change impact",
   "license": "MIT",
+  "type": "module",
   "engines": {
     "node": ">=20"
   },
   "bin": {
-    "apiproof": "./dist/src/cli.js"
+    "dokimana": "./dist/src/cli.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/D1bakar/Dokimana.git"
+  },
+  "homepage": "https://github.com/D1bakar/Dokimana#readme",
+  "bugs": {
+    "url": "https://github.com/D1bakar/Dokimana/issues"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -19,8 +26,7 @@
     "test:watch": "vitest",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write \"**/*.{ts,json,yml,yaml,md}\"",
-    "format:check": "prettier --check \"**/*.{ts,json,yml,yaml,md}\"",
-    "benchmark": "tsx benchmarks/run.ts"
+    "format:check": "prettier --check \"**/*.{ts,json,yml,yaml,md}\""
   },
   "dependencies": {
     "commander": "^12.1.0",

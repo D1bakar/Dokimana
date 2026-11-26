@@ -1,4 +1,4 @@
-# ApiProof website: design contract
+# Dokimana website: design contract
 
 This brief records the visual world for the Next.js pages in `site/`. The site is a
 document, not a marketing funnel: one reading column, six sections, and no decoration.
@@ -53,7 +53,7 @@ The difference section makes no competitor superiority claim. It lists verifiabl
 boundaries: local inputs, no live calls, evidence and confidence, `needs_human`,
 `could_not_run`, and no automatic writes to user files.
 
-Do not claim customers, adoption, benchmarks, complete AST coverage, a working
+Do not claim customers, adoption, performance figures, complete AST coverage, a working
 verification runner, live API integration, or secret handling by the site. Commands must
 match the CLI in `src/cli.ts` and the project README.
 
@@ -63,7 +63,7 @@ match the CLI in `src/cli.ts` and the project README.
 - Every section is reachable from the contents list; links use real anchors.
 - Visible focus via the link-blue outline; keyboard and zoom work without horizontal
   page overflow.
-- At narrow widths the contents rail becomes a wrapped row above the reading column.
+- At narrow widths the contents rail becomes a two-column link grid above the reading column.
 - No animation except instant scroll behavior, which is disabled under reduced motion.
 - No secret fields, trackers, remote scripts, remote fonts, or network calls.
 
@@ -77,7 +77,7 @@ References inspected **2026-11-26** unless noted.
 2. **Right Hemisphere** — supplied reference for large sparing typography, generous
    vertical rhythm, and a minimal text navigation.
    https://www.righthemisphere.studio/
-3. **ApiProof design contract and review checklist (previous revision)** — retained the
+3. **Dokimana design contract and review checklist (previous revision)** — retained the
    truthfulness checks that predate this redesign.
    `DESIGN.md` history in this repository.
 4. **Stripe design extract, shared earlier.** No Stripe assets, copy, or affiliation are
@@ -95,7 +95,7 @@ References inspected **2026-11-26** unless noted.
 
 - [ ] The visitor sees what the tool is, what it does, its limits, setup, use, and differences in one scroll.
 - [ ] No card, border, divider, shadow, gradient, badge, stock image, or remote font remains.
-- [ ] Every command and limit matches `../README.md` and `agent.md`.
+- [ ] Every command and limit matches `README.md` and `agent.md`.
 - [ ] The synthetic nature of fixture inputs and the `could_not_run` boundary stay explicit.
 - [ ] Old routes still resolve to the right section.
 - [ ] Keyboard, focus, zoom, and 320–390px reflow work without page overflow.

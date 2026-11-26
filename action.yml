@@ -1,5 +1,5 @@
-name: ApiProof
-description: Detect Stripe breaking changes and report call-site impact
+name: Dokimana
+description: Compare Stripe OpenAPI files and report affected call sites
 inputs:
   repo:
     description: Repository root relative to the checked-out workspace
@@ -20,11 +20,11 @@ inputs:
   impact-output:
     description: Impact JSON output path, relative to the workspace; its parent directory must exist
     required: false
-    default: apiproof-impact.json
+    default: dokimana-impact.json
   report-output:
     description: Markdown evidence report path, relative to the workspace; its parent directory must exist
     required: false
-    default: apiproof-evidence.md
+    default: dokimana-evidence.md
   fail-on-changes:
     description: Fail the Action after writing reports when one or more structural changes are found
     required: false
@@ -51,5 +51,5 @@ runs:
     - --fail-on-changes
     - ${{ inputs.fail-on-changes }}
 branding:
-  icon: shield
-  color: purple
+  icon: book
+  color: blue

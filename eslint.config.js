@@ -10,8 +10,6 @@ export default [
       'node_modules/**',
       'coverage/**',
       'site/**',
-      'document-site/**',
-      'backend/**',
     ],
   },
   eslint.configs.recommended,

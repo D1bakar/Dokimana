@@ -1,5 +1,5 @@
 services:
-  apiproof:
+  dokimana:
     build: .
     network_mode: none
     read_only: true
