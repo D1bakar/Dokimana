@@ -5,9 +5,7 @@
     "version": "2026-03-31.stripe-real-new",
     "x-stripeSpecFilename": "spec3"
   },
-  "servers": [
-    { "url": "https://api.stripe.com", "description": "Stripe API" }
-  ],
+  "servers": [{ "url": "https://api.stripe.com", "description": "Stripe API" }],
   "components": {
     "schemas": {
       "CustomerBase": {
@@ -15,8 +13,16 @@
         "type": "object",
         "description": "Core fields shared by Customer and DeletedCustomer.",
         "properties": {
-          "id": { "type": "string", "maxLength": 5000, "description": "Unique identifier for the object." },
-          "object": { "type": "string", "enum": ["customer"], "description": "String representing the object's type." },
+          "id": {
+            "type": "string",
+            "maxLength": 5000,
+            "description": "Unique identifier for the object."
+          },
+          "object": {
+            "type": "string",
+            "enum": ["customer"],
+            "description": "String representing the object's type."
+          },
           "created": { "type": "integer", "format": "unix-time" },
           "livemode": { "type": "boolean" }
         },
@@ -36,19 +42,26 @@
                 "anyOf": [{ "$ref": "#/components/schemas/Address" }],
                 "nullable": true
               },
-              "balance": { "type": "string", "description": "The current balance, if any, stored on the customer." },
+              "balance": {
+                "type": "string",
+                "description": "The current balance, if any, stored on the customer."
+              },
               "default_source": {
                 "description": "ID of the default payment source for the customer.",
-                "anyOf": [
-                  { "type": ["string", "null"] },
-                  { "$ref": "#/components/schemas/Card" }
-                ],
+                "anyOf": [{ "type": ["string", "null"] }, { "$ref": "#/components/schemas/Card" }],
                 "x-expansionResources": {
                   "oneOf": [{ "$ref": "#/components/schemas/Card" }]
                 }
               },
-              "email": { "type": ["string", "null"], "maxLength": 512, "description": "The customer's email address." },
-              "invoice_prefix": { "type": ["string", "null"], "description": "The prefix for the customer used to generate unique invoice numbers." },
+              "email": {
+                "type": ["string", "null"],
+                "maxLength": 512,
+                "description": "The customer's email address."
+              },
+              "invoice_prefix": {
+                "type": ["string", "null"],
+                "description": "The prefix for the customer used to generate unique invoice numbers."
+              },
               "metadata": {
                 "type": "object",
                 "additionalProperties": { "type": "string" },
@@ -137,7 +150,10 @@
             "anyOf": [{ "$ref": "#/components/schemas/NotificationEventRequest" }],
             "nullable": true
           },
-          "type": { "type": "string", "description": "Description of the event, e.g., customer.created." }
+          "type": {
+            "type": "string",
+            "description": "Description of the event, e.g., customer.created."
+          }
         },
         "required": ["created", "data", "id", "livemode", "object", "pending_webhooks", "type"],
         "x-expandableFields": ["data", "request"]

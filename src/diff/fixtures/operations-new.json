@@ -27,7 +27,6 @@
   "paths": {
     "/v1/customers/{id}": {
       "get": {
-        "operationId": "getCustomer",
         "parameters": [{ "name": "expand", "in": "query", "schema": { "type": "string" } }]
       }
     }

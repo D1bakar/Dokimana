@@ -441,12 +441,11 @@ export function renderHtml(report: EvidenceReport): string {
 </ul>
 <div class="filters">
 <label>Severity <select id="filter-severity"><option value="all">All severities</option>${SEVERITIES.map(
-    (severity) =>
-      `<option value="${escapeHtml(severity)}">${escapeHtml(severity)}</option>`,
+    (severity) => `<option value="${escapeHtml(severity)}">${escapeHtml(severity)}</option>`,
   ).join('')}</select></label>
-<label>Resource <select id="filter-resource"><option value="all">All resources</option>${resourceNames.map(
-    (name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`,
-  ).join('')}</select></label>
+<label>Resource <select id="filter-resource"><option value="all">All resources</option>${resourceNames
+    .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+    .join('')}</select></label>
 <label>Status <select id="filter-status"><option value="all">All statuses</option>${STATUSES.map(
     (status) =>
       `<option value="${escapeHtml(status)}">${escapeHtml(STATUS_LABELS[status])}</option>`,

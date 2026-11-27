@@ -171,7 +171,8 @@ export function renderSarif(report: EvidenceReport): string {
   if (needsHuman.length > 0) {
     ruleDetails.set(NEEDS_HUMAN_RULE_ID, {
       why: 'A change was recorded for human review because no supported mapping is available.',
-      check: 'Review the change and record a supported mapping only if the supplied sources document one.',
+      check:
+        'Review the change and record a supported mapping only if the supplied sources document one.',
       level: 'warning',
     });
   }

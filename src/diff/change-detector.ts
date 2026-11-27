@@ -1,9 +1,4 @@
-import type {
-  ChangeContext,
-  ChangeKind,
-  ChangeRecord,
-  ProviderSource,
-} from '../domain/types.js';
+import type { ChangeContext, ChangeKind, ChangeRecord, ProviderSource } from '../domain/types.js';
 import {
   buildOpenApiIndex,
   checksum,
@@ -146,11 +141,7 @@ export class ChangeDetector {
     return this.diff({ oldDocument, newDocument, oldVersion, newVersion });
   }
 
-  private diffSchemas(
-    oldIndex: OpenApiIndex,
-    newIndex: OpenApiIndex,
-    record: Recorder,
-  ): void {
+  private diffSchemas(oldIndex: OpenApiIndex, newIndex: OpenApiIndex, record: Recorder): void {
     for (const [resource, oldFields] of oldIndex.schemas) {
       const newFields = newIndex.schemas.get(resource);
       if (!newFields) {
@@ -163,14 +154,7 @@ export class ChangeDetector {
       const newExpandable = new Set(newIndex.expandableFields.get(resource) ?? []);
       for (const field of oldExpandable) {
         if (!newExpandable.has(field)) {
-          record(
-            'schema',
-            resource,
-            'expandable_field_removed',
-            field,
-            'expandable',
-            undefined,
-          );
+          record('schema', resource, 'expandable_field_removed', field, 'expandable', undefined);
         }
       }
 
@@ -181,25 +165,14 @@ export class ChangeDetector {
         const newTargets = refTargets(newField.type);
         for (const target of refTargets(oldField.type)) {
           if (!newTargets.has(target)) {
-            record(
-              'schema',
-              resource,
-              'expandable_target_removed',
-              path,
-              target,
-              undefined,
-            );
+            record('schema', resource, 'expandable_target_removed', path, target, undefined);
           }
         }
       }
     }
   }
 
-  private diffOperations(
-    oldIndex: OpenApiIndex,
-    newIndex: OpenApiIndex,
-    record: Recorder,
-  ): void {
+  private diffOperations(oldIndex: OpenApiIndex, newIndex: OpenApiIndex, record: Recorder): void {
     for (const oldOperation of uniquePathOperations(oldIndex)) {
       const newOperation =
         (oldOperation.operationId
@@ -213,19 +186,15 @@ export class ChangeDetector {
           oldOperation.route,
           'endpoint_removed',
           oldOperation.method,
-          operation,
+          operation.toLowerCase(),
           undefined,
           { operation },
         );
         continue;
       }
-      diffParameters(
-        oldOperation.key,
-        oldOperation.parameters,
-        newOperation.parameters,
-        record,
-        { operation },
-      );
+      diffParameters(oldOperation.key, oldOperation.parameters, newOperation.parameters, record, {
+        operation,
+      });
       if (oldOperation.hasRequestBody && !newOperation.hasRequestBody) {
         record(
           'request_body',
@@ -265,20 +234,23 @@ export class ChangeDetector {
         });
       }
     }
-
   }
 
-  private diffWebhooks(
-    oldIndex: OpenApiIndex,
-    newIndex: OpenApiIndex,
-    record: Recorder,
-  ): void {
+  private diffWebhooks(oldIndex: OpenApiIndex, newIndex: OpenApiIndex, record: Recorder): void {
     for (const [event, oldMethods] of oldIndex.webhooksByEvent) {
       const newMethods = newIndex.webhooksByEvent.get(event);
       if (!newMethods) {
-        record('webhook_event', event, 'webhook_removed', undefined, `webhook ${event}`, undefined, {
-          eventType: event,
-        });
+        record(
+          'webhook_event',
+          event,
+          'webhook_removed',
+          undefined,
+          `webhook ${event}`,
+          undefined,
+          {
+            eventType: event,
+          },
+        );
         continue;
       }
       for (const [method, oldOperation] of oldMethods) {

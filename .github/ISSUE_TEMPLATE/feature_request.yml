@@ -1,7 +1,7 @@
 name: Feature request
 description: Propose a bounded improvement to Dokimana.
-title: "[Feature]: "
-labels: ["enhancement"]
+title: '[Feature]: '
+labels: ['enhancement']
 body:
   - type: markdown
     attributes:

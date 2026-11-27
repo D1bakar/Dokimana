@@ -58,7 +58,9 @@ describe('renderMarkdownReport', () => {
     expect(report).toContain('## By resource');
     expect(report).toContain('## Limits of this scan');
     expect(report).toContain('## Structured Changes');
-    expect(report).toContain('| Context | Change | Resource | Path | Old value | New value | Evidence |');
+    expect(report).toContain(
+      '| Context | Change | Resource | Path | Old value | New value | Evidence |',
+    );
     expect(report).toContain('schema');
     expect(report).toContain('field_removed');
     expect(report).toContain('Customer&#124;&lt;img src=x onerror=alert(1)&gt;');
@@ -132,6 +134,49 @@ describe('renderMarkdownReport', () => {
     expect(report).toContain('## Unresolved Sites');
     expect(report).toContain('dynamic_call');
     expect(report).toContain('Runtime method name.');
+  });
+});
+
+describe('buildEvidenceReport', () => {
+  it('normalizes repository, call-site, and unresolved paths to forward slashes', () => {
+    const input = impact([]);
+    input.findings.push({
+      changeId: 'change_fixture',
+      callSite: {
+        file: 'C:\\repo\\src\\client.ts',
+        line: 1,
+        column: 1,
+        operation: 'customers.update',
+        fieldPath: ['legacy_name'],
+        kind: 'sdk_call',
+        snippet: 'stripe.customers.update(id, { legacy_name: "x" })',
+      },
+      confidence: 'high',
+      reason: 'Fixture finding.',
+      confidenceReason: 'Fixture evidence.',
+    });
+    input.unresolved = [
+      {
+        file: '..\\src\\dynamic.ts',
+        line: 2,
+        column: 3,
+        kind: 'dynamic_call',
+        snippet: 'client[method]()',
+        reason: 'Runtime method name.',
+        relatedChangeIds: [],
+      },
+    ];
+
+    const report = buildEvidenceReport({
+      repository: 'C:\\repo',
+      providerVersion: 'fixture',
+      impact: input,
+      verification: [],
+    });
+
+    expect(report.repository).toBe('C:/repo');
+    expect(report.findings[0]?.callSite.file).toBe('C:/repo/src/client.ts');
+    expect(report.unresolved?.[0]?.file).toBe('../src/dynamic.ts');
   });
 });
 

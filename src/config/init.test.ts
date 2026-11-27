@@ -163,9 +163,9 @@ describe('createConfigFile', () => {
     const path = join(directory, 'dokimana.config.json');
     await writeFile(path, 'sentinel', 'utf8');
 
-    await expect(
-      createConfigFile({ path, repo: 'replacement', overwrite: true }),
-    ).resolves.toEqual({ path, created: true });
+    await expect(createConfigFile({ path, repo: 'replacement', overwrite: true })).resolves.toEqual(
+      { path, created: true },
+    );
 
     const parsed: unknown = JSON.parse(await readFile(path, 'utf8'));
     assertDokimanaConfig(parsed, 'overwritten config');

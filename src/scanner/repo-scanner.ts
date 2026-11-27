@@ -1,5 +1,5 @@
 import { readdir } from 'node:fs/promises';
-import { extname, join, relative, resolve, sep } from 'node:path';
+import { extname, join, relative, resolve } from 'node:path';
 import {
   Node,
   Project,
@@ -9,7 +9,6 @@ import {
   type ObjectLiteralExpression,
   type SourceFile,
   type SwitchStatement,
-  type VariableDeclaration,
 } from 'ts-morph';
 import type {
   CallSiteKind,
@@ -24,6 +23,7 @@ import type {
 } from '../domain/types.js';
 import { buildProjectIndex, type SourceFacts } from './project-index.js';
 import { mapSdkOperation, operationMatchesChange, type SdkOperation } from './sdk-map.js';
+import { toPosixPath } from '../util/paths.js';
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 const IGNORED_DIRECTORIES = new Set([
@@ -61,9 +61,9 @@ interface ExtractedField {
 
 interface ExtractionIssue {
   kind: UnresolvedKind;
-  line: number;
-  column: number;
+  position: number;
   snippet: string;
+  reason: string;
 }
 
 interface ExtractionResult {
@@ -144,7 +144,7 @@ export class RepoScanner {
 
     return {
       generatedAt: new Date().toISOString(),
-      root,
+      root: toPosixPath(repositoryRoot),
       changes,
       findings: dedupeFindings(findings).sort(compareFindings),
       needsHuman,
@@ -286,9 +286,7 @@ class FileScan {
                   confidence === 'high'
                     ? 'The SDK receiver and object-literal key are statically resolved.'
                     : 'The object literal was resolved through a local identifier.',
-                ...(info.operation === undefined
-                  ? {}
-                  : { openApiOperation: info.operation.label }),
+                ...(info.operation === undefined ? {} : { openApiOperation: info.operation.label }),
               }),
           });
         }
@@ -314,9 +312,10 @@ class FileScan {
           const last = segments[segments.length - 1];
           if (last !== name) continue;
           if (change.context === 'request_parameter') continue;
-          if (change.eventType !== undefined && change.path !== 'data.previous_attributes') continue;
+          if (change.eventType !== undefined && change.path !== 'data.previous_attributes')
+            continue;
           if (
-            (change.context === 'request' || change.context === 'response') &&
+            (change.context === 'request_body' || change.context === 'response') &&
             (info.operation === undefined || !operationMatchesChange(change, info.operation))
           ) {
             continue;
@@ -327,11 +326,11 @@ class FileScan {
             operation: info.parts.join('.'),
             fieldPath: [name],
             kind: 'sdk_field',
-            confidence: 'high',
+            confidence: 'medium',
             snippet: element.getText().slice(0, MAX_SNIPPET_LENGTH),
             reason: `Property "${name}" is destructured from a Stripe SDK result and matches the changed ${describeChange(change)}.`,
             confidenceReason:
-              'The binding comes directly from a statically identified Stripe SDK call.',
+              'The binding comes from a statically identified Stripe SDK call, but runtime values are not proven.',
             ...(info.operation === undefined ? {} : { openApiOperation: info.operation.label }),
           });
         }
@@ -362,12 +361,14 @@ class FileScan {
               operation: value?.parts.join('.') ?? 'sdk_result',
               fieldPath: segments,
               kind: 'sdk_field',
-              confidence: 'high',
+              confidence: 'medium',
               snippet: property.getText().slice(0, MAX_SNIPPET_LENGTH),
               reason: `Property "${joinPath(segments)}" is read from a Stripe SDK result and matches the changed ${describeChange(change)}.`,
               confidenceReason:
-                'The property chain starts from a value assigned directly from a Stripe SDK call.',
-              ...(value?.operation === undefined ? {} : { openApiOperation: value.operation.label }),
+                'The property chain starts from a local value assigned from a Stripe SDK call; runtime values are not proven.',
+              ...(value?.operation === undefined
+                ? {}
+                : { openApiOperation: value.operation.label }),
             });
           }
         }
@@ -383,6 +384,7 @@ class FileScan {
           if (!exactSegmentsMatch(segments, toPathSegments(change.path ?? ''))) continue;
           if (change.kind === 'field_became_required') continue;
           if (!this.changeOperationMatchesResource(change, resource)) continue;
+          const operation = operationForResource(resource);
           this.addFinding({
             change,
             position: property.getStart(),
@@ -394,9 +396,7 @@ class FileScan {
             reason: `Property "${joinPath(segments)}" is read from a value typed as Stripe.${resource} and matches the changed field.`,
             confidenceReason:
               'The type annotation identifies a Stripe model, but the value may come from any source.',
-            ...(operationForResource(resource) === undefined
-              ? {}
-              : { openApiOperation: operationForResource(resource) }),
+            ...(operation === undefined ? {} : { openApiOperation: operation }),
           });
         }
       }
@@ -417,7 +417,8 @@ class FileScan {
             kind: 'dynamic_webhook_case',
             position: clause.getStart(),
             snippet: clause.getText().slice(0, MAX_SNIPPET_LENGTH),
-            reason: 'A webhook switch case is not a string literal, so its event type is unresolved.',
+            reason:
+              'A webhook switch case is not a string literal, so its event type is unresolved.',
           });
           continue;
         }
@@ -522,11 +523,7 @@ class FileScan {
     field: ExtractedField;
     operation?: SdkOperation;
     context: FieldContext;
-    add: (
-      change: ChangeRecord,
-      matchedSegments: string[],
-      confidence: Confidence,
-    ) => void;
+    add: (change: ChangeRecord, matchedSegments: string[], confidence: Confidence) => void;
   }): void {
     for (const change of this.options.changes) {
       if (change.kind === 'enum_value_removed') {
@@ -534,7 +531,11 @@ class FileScan {
       }
       if (input.context === 'expand') {
         if (change.path !== input.field.segments[1]) continue;
-        if (input.operation && change.operation && !operationMatchesChange(change, input.operation)) {
+        if (
+          input.operation &&
+          change.operation &&
+          !operationMatchesChange(change, input.operation)
+        ) {
           continue;
         }
       } else if (!fieldMatches(change, input.field.segments, input.operation, input.context)) {
@@ -585,10 +586,9 @@ class FileScan {
   }
 
   private findSdkCall(node: Node): SdkCallInfo | undefined {
-    const calls =
-      Node.isCallExpression(node)
-        ? [node]
-        : node.getDescendantsOfKind(SyntaxKind.CallExpression);
+    const calls = Node.isCallExpression(node)
+      ? [node]
+      : node.getDescendantsOfKind(SyntaxKind.CallExpression);
     for (const call of calls) {
       const callee = call.getExpression();
       if (!Node.isPropertyAccessExpression(callee)) continue;
@@ -616,9 +616,9 @@ class FileScan {
         issues: [
           {
             kind: 'spread_argument',
-            line: value.getStartLineNumber(),
-            column: 1,
+            position: value.getStart(),
             snippet: value.getText().slice(0, MAX_SNIPPET_LENGTH),
+            reason: 'Spread arguments are not resolved statically; their fields were not verified.',
           },
         ],
       };
@@ -633,9 +633,9 @@ class FileScan {
         issues: [
           {
             kind: 'spread_argument',
-            line: value.getStartLineNumber(),
-            column: 1,
+            position: value.getStart(),
             snippet: value.getText().slice(0, MAX_SNIPPET_LENGTH),
+            reason: `Argument "${value.getText()}" could not be resolved to a local object literal; its fields were not verified.`,
           },
         ],
       };
@@ -643,7 +643,10 @@ class FileScan {
     return { fields: [], issues: [] };
   }
 
-  private resolveObjectLiteral(name: string, seen = new Set<string>()): ObjectLiteralExpression | undefined {
+  private resolveObjectLiteral(
+    name: string,
+    seen = new Set<string>(),
+  ): ObjectLiteralExpression | undefined {
     if (seen.has(name)) return undefined;
     seen.add(name);
     for (const declaration of this.options.sourceFile.getDescendantsOfKind(
@@ -660,7 +663,10 @@ class FileScan {
     return undefined;
   }
 
-  private longestRoot<T>(chain: string[], names: ReadonlyMap<string, T>): ClientRoot | undefined {
+  private longestRoot(
+    chain: string[],
+    names: ReadonlySet<string> | ReadonlyMap<string, unknown>,
+  ): ClientRoot | undefined {
     for (let length = chain.length - 1; length >= 1; length -= 1) {
       const text = chain.slice(0, length).join('.');
       if (names.has(text) || text === INLINE_CLIENT) return { text, length };
@@ -710,9 +716,10 @@ function extractFields(
     if (Node.isSpreadAssignment(property)) {
       issues.push({
         kind: 'spread_argument',
-        line: property.getStartLineNumber(),
-        column: 1,
+        position: property.getStart(),
         snippet: property.getText().slice(0, MAX_SNIPPET_LENGTH),
+        reason:
+          'Spread object members are not resolved statically; their fields were not verified.',
       });
       continue;
     }
@@ -723,9 +730,9 @@ function extractFields(
     if (nameNode && Node.isComputedPropertyName(nameNode)) {
       issues.push({
         kind: 'dynamic_call',
-        line: property.getStartLineNumber(),
-        column: 1,
+        position: nameNode.getStart(),
         snippet: nameNode.getText().slice(0, MAX_SNIPPET_LENGTH),
+        reason: 'Computed object keys are resolved at runtime; this field was not verified.',
       });
       continue;
     }
@@ -737,20 +744,21 @@ function extractFields(
     if (name === undefined) continue;
     const segments = [...prefix, name];
     const initializer = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
+    const fieldValue = literalValue(initializer);
     fields.push({
       segments,
       confidence,
-      ...(literalValue(initializer) === undefined ? {} : { value: literalValue(initializer) }),
+      ...(fieldValue === undefined ? {} : { value: fieldValue }),
     });
     if (!initializer) continue;
-    const value = unwrap(initializer);
-    if (Node.isObjectLiteralExpression(value)) {
-      extractFields(value, confidence, segments, fields, issues);
+    const initializerValue = unwrap(initializer);
+    if (Node.isObjectLiteralExpression(initializerValue)) {
+      extractFields(initializerValue, confidence, segments, fields, issues);
       continue;
     }
-    if (Node.isArrayLiteralExpression(value)) {
+    if (Node.isArrayLiteralExpression(initializerValue)) {
       fields.push({ segments: [...segments, '[]'], confidence });
-      for (const element of value.getElements()) {
+      for (const element of initializerValue.getElements()) {
         const item = unwrap(element);
         if (Node.isStringLiteral(item)) {
           fields.push({ segments: [...segments, item.getLiteralValue()], confidence });
@@ -783,9 +791,12 @@ function fieldMatches(
 ): boolean {
   if (change.eventType !== undefined || change.context === 'webhook_event') return false;
   if (!exactSegmentsMatch(segments, toPathSegments(change.path ?? ''))) return false;
-  if (change.operation !== undefined || context === 'request' || context === 'response') {
+  if (change.operation !== undefined) {
     if (operation === undefined) return false;
     return operationMatchesChange(change, operation);
+  }
+  if (context === 'request' || context === 'response') {
+    return operation !== undefined;
   }
   return true;
 }
@@ -845,7 +856,8 @@ function propertyChain(node: Node, constructorNames: ReadonlySet<string>): strin
     }
     if (Node.isElementAccessExpression(current)) {
       const argument = current.getArgumentExpression();
-      const name = argument && Node.isStringLiteral(argument) ? argument.getLiteralValue() : '[dynamic]';
+      const name =
+        argument && Node.isStringLiteral(argument) ? argument.getLiteralValue() : '[dynamic]';
       segments.unshift(name);
       current = current.getExpression();
       continue;
@@ -949,7 +961,9 @@ function buildCoverageNotes(
     'Type annotations are read textually; project path aliases and generated code are not resolved. Dynamic SDK calls, REST fetch calls, and runtime values are not considered verified coverage.',
   ];
   if (sourceFileCount === 0) {
-    notes.push('No source files were scanned. An empty result is not evidence of complete coverage.');
+    notes.push(
+      'No source files were scanned. An empty result is not evidence of complete coverage.',
+    );
   }
   if (needsHuman.length > 0) {
     const kinds = [...new Set(needsHuman.map((item) => item.kind))].sort().join(', ');
@@ -1037,10 +1051,6 @@ async function collectSourceFiles(root: string): Promise<string[]> {
   };
   await walk(root);
   return files;
-}
-
-function toPosixPath(path: string): string {
-  return path.split(sep).join('/');
 }
 
 function normalizePath(path: string): string {

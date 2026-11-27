@@ -7,10 +7,7 @@
   },
   {
     "id": "cross-file-use",
-    "files": [
-      "fixtures/call-sites/cross-file-client.ts",
-      "fixtures/call-sites/cross-file-use.ts"
-    ],
+    "files": ["fixtures/call-sites/cross-file-client.ts", "fixtures/call-sites/cross-file-use.ts"],
     "pattern": "Imported client used in a different file",
     "expectation": "unresolved"
   },
@@ -64,10 +61,7 @@
   },
   {
     "id": "reexport-client",
-    "files": [
-      "fixtures/call-sites/singleton-client.ts",
-      "fixtures/call-sites/reexport-client.ts"
-    ],
+    "files": ["fixtures/call-sites/singleton-client.ts", "fixtures/call-sites/reexport-client.ts"],
     "pattern": "Singleton client re-exported from a barrel module",
     "expectation": "unresolved"
   },

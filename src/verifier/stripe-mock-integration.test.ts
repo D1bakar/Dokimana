@@ -54,30 +54,26 @@ describe.skipIf(!available)('stripe-mock integration', () => {
     },
   };
 
-  it(
-    'executes a request sequence against both fixture specs inside isolated containers',
-    async () => {
-      const verifier = new StripeMockVerifier({
-        oldSpecPath: resolve('src/diff/fixtures/stripe-real-old.json'),
-        newSpecPath: resolve('src/diff/fixtures/stripe-real-new.json'),
-        commandExecutor: executor,
-        timeoutSeconds: 30,
-      });
+  it('executes a request sequence against both fixture specs inside isolated containers', async () => {
+    const verifier = new StripeMockVerifier({
+      oldSpecPath: resolve('src/diff/fixtures/stripe-real-old.json'),
+      newSpecPath: resolve('src/diff/fixtures/stripe-real-new.json'),
+      commandExecutor: executor,
+      timeoutSeconds: 30,
+    });
 
-      const result = await verifier.verify(scenario);
+    const result = await verifier.verify(scenario);
 
-      expect(result.classification).not.toBe('could_not_run');
-      expect(result.classification).toMatch(
-        /^(equivalent|intentionally_different|unexplained_difference)$/,
-      );
-      expect(result.container).toEqual({ isolated: true, network: 'none', secrets: 'none' });
-      expect(result.executedAt).toBeDefined();
-      expect(result.reason).toContain(STRIPE_MOCK_LIMITATION);
+    expect(result.classification).not.toBe('could_not_run');
+    expect(result.classification).toMatch(
+      /^(equivalent|intentionally_different|unexplained_difference)$/,
+    );
+    expect(result.container).toEqual({ isolated: true, network: 'none', secrets: 'none' });
+    expect(result.executedAt).toBeDefined();
+    expect(result.reason).toContain(STRIPE_MOCK_LIMITATION);
 
-      const output = result.newOutput as { requests: Array<{ status: number }> };
-      expect(output.requests).toHaveLength(1);
-      expect(output.requests[0]?.status).toBeGreaterThan(0);
-    },
-    90_000,
-  );
+    const output = result.newOutput as { requests: Array<{ status: number }> };
+    expect(output.requests).toHaveLength(1);
+    expect(output.requests[0]?.status).toBeGreaterThan(0);
+  }, 90_000);
 });

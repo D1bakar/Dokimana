@@ -138,11 +138,7 @@ export class StripeMockVerifier {
     let workspace: string | undefined;
     const startedContainers: string[] = [];
     try {
-      const docker = await this.safeExec('docker', [
-        'version',
-        '--format',
-        '{{.Server.Version}}',
-      ]);
+      const docker = await this.safeExec('docker', ['version', '--format', '{{.Server.Version}}']);
       if (docker.exitCode !== 0 || docker.stdout.trim() === '') {
         throw new RuntimeFailure(
           `Docker is unavailable or its daemon is unreachable (docker version --format {{.Server.Version}} exited ${docker.exitCode}).`,
@@ -312,13 +308,7 @@ export class StripeMockVerifier {
       const remoteRequest = `${REQUESTS_MOUNT_PATH}/${requestFileName(index)}`;
       const response = await this.safeExec(
         'docker',
-        [
-          'exec',
-          name,
-          '/bin/sh',
-          '-c',
-          `nc -w 2 127.0.0.1 ${HTTP_PORT} < ${remoteRequest}`,
-        ],
+        ['exec', name, '/bin/sh', '-c', `nc -w 2 127.0.0.1 ${HTTP_PORT} < ${remoteRequest}`],
         timeoutMs,
       );
       if (response.exitCode !== 0) {
@@ -506,10 +496,7 @@ function parseObservation(rawResponse: string): StripeMockRequestObservation {
   const headerLines = rawResponse.slice(0, headerEnd).replace(/\r\n/g, '\n').split('\n');
   const statusMatch = /^HTTP\/[\d.]+ (\d{3})\b/.exec(headerLines[0] ?? '');
   if (statusMatch === null || statusMatch[1] === undefined) {
-    throw new RuntimeFailure(
-      'stripe-mock returned an unreadable HTTP status line.',
-      RUNTIME_FIX,
-    );
+    throw new RuntimeFailure('stripe-mock returned an unreadable HTTP status line.', RUNTIME_FIX);
   }
   const headers = new Map<string, string>();
   for (const line of headerLines.slice(1)) {

@@ -17,11 +17,7 @@ import { assertSafeTestModeKeys, validateStripeKey } from './verifier/key-safety
 import { assertOpenApiInput } from './diff/structured-diff.js';
 import { fetchStripeSpec, type StripeSpecChannel } from './provider/stripe-fetch.js';
 import { createConfigFile } from './config/init.js';
-import {
-  assertMappingsFile,
-  suggestChanges,
-  type MappingsFile,
-} from './suggest/suggest.js';
+import { assertMappingsFile, suggestChanges, type MappingsFile } from './suggest/suggest.js';
 import { StripeMockVerifier } from './verifier/stripe-mock-runner.js';
 import type { EvidenceReport, ImpactReport, Scenario } from './domain/types.js';
 import { DockerNotConfiguredRunner } from './verifier/container-runner.js';
@@ -103,7 +99,12 @@ program
   .option('--scenario <file>', 'Scenario JSON file')
   .option('--old-spec <file>', 'Baseline OpenAPI spec for an isolated stripe-mock run')
   .option('--new-spec <file>', 'Candidate OpenAPI spec for an isolated stripe-mock run')
-  .option('--timeout <seconds>', 'Timeout for each isolated container run', parsePositiveInteger, 30)
+  .option(
+    '--timeout <seconds>',
+    'Timeout for each isolated container run',
+    parsePositiveInteger,
+    30,
+  )
   .option('--json <file>', 'Write the verification result as JSON')
   .action(async (options) => {
     assertSafeTestModeKeys(process.env);
@@ -119,10 +120,10 @@ program
             newSpecPath: resolve(options.newSpec),
             timeoutSeconds: options.timeout,
           }).verify(scenario, process.env)
-        : await new Verifier(
-            new DockerNotConfiguredRunner(),
-            resolve(options.repo),
-          ).verify(scenario, process.env);
+        : await new Verifier(new DockerNotConfiguredRunner(), resolve(options.repo)).verify(
+            scenario,
+            process.env,
+          );
     if (options.json) await writeFile(resolve(options.json), JSON.stringify(result, null, 2));
     console.log(
       JSON.stringify({
@@ -131,7 +132,10 @@ program
         reason: result.reason,
       }),
     );
-    if (result.classification === 'could_not_run' || result.classification === 'unexplained_difference') {
+    if (
+      result.classification === 'could_not_run' ||
+      result.classification === 'unexplained_difference'
+    ) {
       process.exitCode = 1;
     }
   });
@@ -144,7 +148,11 @@ program
   .option('--provider-version <version>', 'Provider version', 'unknown')
   .option('--sarif <file>', 'Write SARIF report')
   .option('--html <file>', 'Write self-contained HTML report')
-  .option('--format <format>', 'Output written to stdout: json, markdown, sarif, or html', 'markdown')
+  .option(
+    '--format <format>',
+    'Output written to stdout: json, markdown, sarif, or html',
+    'markdown',
+  )
   .option('--fail-on <level>', 'Exit with code 1 at this level: high, medium, low, or none', 'none')
   .action(async (options) => {
     const impact: unknown = JSON.parse(await readFile(resolve(options.impact), 'utf8'));
@@ -302,13 +310,10 @@ function reachesThreshold(report: EvidenceReport, failOn: Exclude<FailOn, 'none'
       const kind = change.kind;
       return (
         ranks[
-          kind.startsWith('expandable') || kind.endsWith('enum_value_removed')
-            ? 'medium'
-            : 'high'
+          kind.startsWith('expandable') || kind.endsWith('enum_value_removed') ? 'medium' : 'high'
         ] >= threshold
       );
-    }) ||
-    report.findings.some((finding) => ranks[finding.confidence] >= threshold)
+    }) || report.findings.some((finding) => ranks[finding.confidence] >= threshold)
   );
 }
 

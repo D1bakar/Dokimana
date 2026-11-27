@@ -396,7 +396,9 @@ describe('JSON Pointer resolution', () => {
         schemas: {
           'A/B': {
             type: 'object',
-            properties: { nested: { type: 'object', properties: { legacy_code: { type: 'string' } } } },
+            properties: {
+              nested: { type: 'object', properties: { legacy_code: { type: 'string' } } },
+            },
           },
           Root: { $ref: '#/components/schemas/A~1B' },
         },

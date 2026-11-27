@@ -1,5 +1,5 @@
 import { dirname, resolve } from 'node:path';
-import { Node, Project, SyntaxKind, type SourceFile } from 'ts-morph';
+import { Node, SyntaxKind, type ExportSpecifier, type Project, type SourceFile } from 'ts-morph';
 
 export type StripeSymbolKind = 'client' | 'resource' | 'event';
 
@@ -108,7 +108,9 @@ function isStripeConstructor(node: Node, constructorNames: ReadonlySet<string>):
 
 function isConstructEventCall(node: Node): boolean {
   const value = unwrap(node);
-  return Node.isCallExpression(value) && value.getExpression().getText().endsWith('.constructEvent');
+  return (
+    Node.isCallExpression(value) && value.getExpression().getText().endsWith('.constructEvent')
+  );
 }
 
 function importBindings(declaration: Node): Array<{ imported: string; local: string }> {
@@ -125,7 +127,7 @@ function importBindings(declaration: Node): Array<{ imported: string; local: str
   return bindings;
 }
 
-function exportSpecifier(specifier: Node): { local: string; exported: string } {
+function exportSpecifier(specifier: ExportSpecifier): { local: string; exported: string } {
   const nameNode = specifier.getNameNode();
   const local = nameNode.getText();
   const alias = specifier.getAliasNode()?.getText();
@@ -164,15 +166,6 @@ function resolveImportSource(
   return undefined;
 }
 
-function copySymbol(
-  name: string,
-  from: Map<string, ExportedSymbol>,
-  to: Map<string, ExportedSymbol>,
-): void {
-  const symbol = from.get(name);
-  if (symbol) to.set(name, symbol);
-}
-
 function collectLocalFacts(fact: SourceFacts): void {
   const sourceFile = fact.sourceFile;
 
@@ -198,6 +191,11 @@ function collectLocalFacts(fact: SourceFacts): void {
   for (const declaration of sourceFile.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
     const name = identifierName(declaration.getNameNode());
     if (!name) continue;
+    const initializer = declaration.getInitializer();
+    if (initializer && isRequireStripe(initializer)) {
+      fact.constructorNames.add(name);
+      continue;
+    }
     const type = classifyType(declaredType(declaration), fact.typeAliases);
     if (type?.kind === 'client') fact.clientNames.add(name);
     if (type?.kind === 'resource' && type.resource) fact.typedNames.set(name, type.resource);
@@ -205,7 +203,6 @@ function collectLocalFacts(fact: SourceFacts): void {
       fact.typedNames.set(name, 'Event');
       fact.webhookNames.add(name);
     }
-    const initializer = declaration.getInitializer();
     if (!initializer) continue;
     if (isStripeConstructor(initializer, fact.constructorNames)) fact.clientNames.add(name);
     if (isConstructEventCall(initializer)) {
@@ -214,7 +211,7 @@ function collectLocalFacts(fact: SourceFacts): void {
     }
   }
 
-  for (const parameter of sourceFile.getDescendantsOfKind(SyntaxKind.ParameterDeclaration)) {
+  for (const parameter of sourceFile.getDescendantsOfKind(SyntaxKind.Parameter)) {
     const name = identifierName(parameter.getNameNode());
     if (!name) continue;
     const type = classifyType(declaredType(parameter), fact.typeAliases);

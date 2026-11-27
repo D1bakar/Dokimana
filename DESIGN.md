@@ -16,11 +16,11 @@ not a generic landing page.
 
 Exactly three values:
 
-| Role       | Value     | Use                               |
-| ---------- | --------- | --------------------------------- |
-| Paper      | `#f5f5f5` | Page background                   |
-| Ink        | `#292929` | All body text and headings        |
-| Link blue  | `#1656cc` | Links and focus outlines only     |
+| Role      | Value     | Use                           |
+| --------- | --------- | ----------------------------- |
+| Paper     | `#f5f5f5` | Page background               |
+| Ink       | `#292929` | All body text and headings    |
+| Link blue | `#1656cc` | Links and focus outlines only |
 
 Hierarchy comes from size, weight, and space. Ink at reduced opacity may create secondary
 text; no other hue, gradient, fill, or decorative color is introduced.

@@ -149,10 +149,7 @@ function validateRecord(value: unknown, label: string): asserts value is JsonRec
   if (!isRecord(value)) throw new Error(`${label} must be a JSON object.`);
 }
 
-export function assertOpenApiInput(
-  value: unknown,
-  label: string,
-): asserts value is OpenApiInput {
+export function assertOpenApiInput(value: unknown, label: string): asserts value is OpenApiInput {
   validateRecord(value, label);
   if (typeof value.openapi !== 'string' || value.openapi.length === 0) {
     throw new Error(`${label} must include a non-empty "openapi" version string.`);
@@ -195,7 +192,9 @@ export function serializeValue(value: unknown): string {
 }
 
 export function checksum(value: unknown): string {
-  return createHash('sha256').update(JSON.stringify(canonicalize(value))).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify(canonicalize(value)))
+    .digest('hex');
 }
 
 function decodePointerToken(token: string): string {
@@ -258,7 +257,12 @@ function resolveSchema(
   return { schema: current, seenRefs: seen };
 }
 
-function compositionBranches(schema: OpenApiSchema, document: OpenApiInput): OpenApiSchema[] {
+interface CompositionBranch {
+  schema: OpenApiSchema;
+  reference?: string;
+}
+
+function compositionBranches(schema: OpenApiSchema, document: OpenApiInput): CompositionBranch[] {
   const candidates: unknown[] = [];
   for (const field of ['allOf', 'anyOf', 'oneOf'] as const) {
     if (schema[field] !== undefined) candidates.push(schema[field]);
@@ -270,12 +274,16 @@ function compositionBranches(schema: OpenApiSchema, document: OpenApiInput): Ope
     }
   }
 
-  const branches: OpenApiSchema[] = [];
+  const branches: CompositionBranch[] = [];
   for (const candidate of candidates) {
     const values = asSchemaArray(candidate) ?? [];
     for (const value of values) {
       const resolved = resolveSchema(value, document, new Set());
-      if (resolved) branches.push(resolved.schema);
+      if (!resolved) continue;
+      branches.push({
+        schema: resolved.schema,
+        ...(typeof value.$ref === 'string' ? { reference: value.$ref } : {}),
+      });
     }
   }
   return branches;
@@ -289,12 +297,21 @@ function schemaTypes(
   const types = new Set<string>();
   if (typeof schema.$ref === 'string') types.add(`ref:${schema.$ref}`);
 
-  if (typeof schema.type === 'string') {
-    types.add(schema.type);
-  } else if (Array.isArray(schema.type)) {
-    for (const type of schema.type) {
-      if (typeof type === 'string') types.add(type);
+  const declaredTypes =
+    typeof schema.type === 'string'
+      ? [schema.type]
+      : Array.isArray(schema.type)
+        ? schema.type.filter((type): type is string => typeof type === 'string')
+        : [];
+  for (const type of declaredTypes) {
+    if (type === 'array' && schema.items !== undefined) continue;
+    if (
+      type === 'object' &&
+      (isRecord(schema.additionalProperties) || schema.additionalProperties === true)
+    ) {
+      continue;
     }
+    types.add(type);
   }
   if (schema.nullable === true) types.add('null');
 
@@ -311,9 +328,13 @@ function schemaTypes(
   if (schema.properties && types.size === 0) types.add('object');
 
   for (const branch of compositionBranches(schema, document)) {
-    const branchRefs = typeof branch.$ref === 'string' ? [branch.$ref] : [];
-    if (branchRefs.some((reference) => seenRefs.has(reference))) continue;
-    for (const type of schemaTypes(branch, document, new Set([...seenRefs, ...branchRefs]))) {
+    const nextSeenRefs = new Set(seenRefs);
+    if (branch.reference !== undefined) {
+      if (nextSeenRefs.has(branch.reference)) continue;
+      nextSeenRefs.add(branch.reference);
+      types.add(`ref:${branch.reference}`);
+    }
+    for (const type of schemaTypes(branch.schema, document, nextSeenRefs)) {
       types.add(type);
     }
   }
@@ -337,9 +358,12 @@ function enumValues(
 
   for (const value of schema.enum ?? []) add(value);
   for (const branch of compositionBranches(schema, document)) {
-    const branchRefs = typeof branch.$ref === 'string' ? [branch.$ref] : [];
-    if (branchRefs.some((reference) => seenRefs.has(reference))) continue;
-    for (const value of enumValues(branch, document, new Set([...seenRefs, ...branchRefs]))) {
+    const nextSeenRefs = new Set(seenRefs);
+    if (branch.reference !== undefined) {
+      if (nextSeenRefs.has(branch.reference)) continue;
+      nextSeenRefs.add(branch.reference);
+    }
+    for (const value of enumValues(branch.schema, document, nextSeenRefs)) {
       add(value);
     }
   }
@@ -397,16 +421,7 @@ function visitChildren(
   }
 
   if (current.items) {
-    visit(
-      current.items,
-      document,
-      `${prefix}[]`,
-      '',
-      false,
-      new Set(),
-      resolved.seenRefs,
-      fields,
-    );
+    visit(current.items, document, `${prefix}[]`, '', false, new Set(), resolved.seenRefs, fields);
   }
   if (isRecord(current.additionalProperties)) {
     visit(
@@ -422,7 +437,9 @@ function visitChildren(
   }
 
   for (const branch of compositionBranches(current, document)) {
-    visitChildren(branch, document, prefix, required, expandable, resolved.seenRefs, fields);
+    const nextSeenRefs = new Set(resolved.seenRefs);
+    if (branch.reference !== undefined) nextSeenRefs.add(branch.reference);
+    visitChildren(branch.schema, document, prefix, required, expandable, nextSeenRefs, fields);
   }
 }
 
@@ -450,7 +467,10 @@ function visit(
   );
 }
 
-export function schemaFields(schema: OpenApiSchema, document: OpenApiInput): Map<string, SchemaField> {
+export function schemaFields(
+  schema: OpenApiSchema,
+  document: OpenApiInput,
+): Map<string, SchemaField> {
   const fields = new Map<string, SchemaField>();
   visitChildren(schema, document, '', new Set(), new Set(), new Set(), fields);
   return fields;
@@ -526,7 +546,9 @@ function jsonSchema(value: unknown, document: OpenApiInput): OpenApiSchema | und
     contentTypes.find((type) => type.endsWith('+json')) ??
     contentTypes[0];
   if (contentType === undefined) return undefined;
-  return asSchema(isRecord(current.content[contentType]) ? current.content[contentType].schema : undefined);
+  return asSchema(
+    isRecord(current.content[contentType]) ? current.content[contentType].schema : undefined,
+  );
 }
 
 function indexedOperations(
@@ -539,7 +561,8 @@ function indexedOperations(
     for (const [method, value] of Object.entries(pathItem)) {
       if (!httpMethods.has(method.toLowerCase()) || !isRecord(value)) continue;
       const operation: OpenApiOperationObject = value;
-      const operationId = typeof operation.operationId === 'string' ? operation.operationId : undefined;
+      const operationId =
+        typeof operation.operationId === 'string' ? operation.operationId : undefined;
       const normalizedMethod = method.toLowerCase();
       const responses = new Map<string, Map<string, SchemaField>>();
       for (const status of Object.keys(operation.responses ?? {}).sort()) {

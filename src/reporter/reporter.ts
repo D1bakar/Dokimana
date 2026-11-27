@@ -6,6 +6,7 @@ import type {
   VerificationResult,
 } from '../domain/types.js';
 import { explainChange, severityForChange, type ChangeSeverity } from './explanations.js';
+import { toPosixPath } from '../util/paths.js';
 
 const SEVERITIES: ChangeSeverity[] = ['high', 'medium', 'low'];
 
@@ -53,7 +54,9 @@ export function renderTerminalReport(report: EvidenceReport): string {
       `  - [${terminalText(severityForChange(change.kind))}] [${terminalText(change.context ?? 'unspecified')}] ${terminalText(change.kind)} ${terminalText(change.resource)}${change.path ? `.${terminalText(change.path)}` : ''}: ${terminalText(change.oldValue)} -> ${terminalText(change.newValue ?? 'removed')}`,
     );
     const explanation = explainChange(change.kind);
-    lines.push(`      Why: ${terminalText(explanation.why)} Check: ${terminalText(explanation.check)}`);
+    lines.push(
+      `      Why: ${terminalText(explanation.why)} Check: ${terminalText(explanation.check)}`,
+    );
   }
   for (const item of report.needsHuman) {
     const suffix = item.path ? `.${terminalText(item.path)}` : '';
@@ -93,7 +96,7 @@ function inlineCode(value: string): string {
 function markdownText(value: string): string {
   return escapeHtml(value)
     .split(/\r\n?|\n/)
-    .map((line) => line.replace(/([\\`*_{}[\]()#+.!|>~-])/g, '\\$1'))
+    .map((line) => line.replace(/([\\`*_{}[\]()#+!|>~-])/g, '\\$1'))
     .join('<br>');
 }
 
@@ -216,15 +219,13 @@ export function assertImpactReport(value: unknown, label: string): asserts value
       throw new Error(`${label} must include "${field}" as a non-empty string.`);
     }
   }
-  for (
-    const field of [
-      'changes',
-      'findings',
-      'needsHuman',
-      'unresolved',
-      'unverifiedCallSiteCoverage',
-    ] as const
-  ) {
+  for (const field of [
+    'changes',
+    'findings',
+    'needsHuman',
+    'unresolved',
+    'unverifiedCallSiteCoverage',
+  ] as const) {
     if (value[field] === undefined) value[field] = [];
     if (!Array.isArray(value[field])) throw new Error(`${label}.${field} must be an array.`);
   }
@@ -239,13 +240,21 @@ export function buildEvidenceReport(input: {
   const unresolved = Array.isArray(input.impact.unresolved) ? input.impact.unresolved : [];
   return {
     generatedAt: new Date().toISOString(),
-    repository: input.repository,
+    repository: toPosixPath(input.repository),
     providerVersion: input.providerVersion,
     impactAnalysis: input.impact.findings.length > 0 ? 'static_evidence' : 'none',
     changes: input.impact.changes,
-    findings: input.impact.findings,
+    findings: input.impact.findings.map((finding) => ({
+      ...finding,
+      callSite: {
+        ...finding.callSite,
+        file: toPosixPath(finding.callSite.file),
+      },
+    })),
     needsHuman: input.impact.needsHuman,
-    ...(unresolved.length > 0 ? { unresolved } : {}),
+    ...(unresolved.length > 0
+      ? { unresolved: unresolved.map((item) => ({ ...item, file: toPosixPath(item.file) })) }
+      : {}),
     verification: input.verification,
     limitations: [
       ...input.impact.unverifiedCallSiteCoverage,

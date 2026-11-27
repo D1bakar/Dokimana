@@ -12,7 +12,8 @@ export function explainChange(kind: ChangeKind): ChangeExplanation {
     case 'field_removed':
       return {
         why: 'A field present in the old supplied specification is absent in the new one.',
-        check: 'Find code that reads or writes this field and confirm how each site handles its absence.',
+        check:
+          'Find code that reads or writes this field and confirm how each site handles its absence.',
       };
     case 'field_renamed':
       return {
@@ -27,22 +28,26 @@ export function explainChange(kind: ChangeKind): ChangeExplanation {
     case 'field_became_required':
       return {
         why: 'A field that could previously be omitted is now required by the supplied specification.',
-        check: 'Find code that builds objects without this field and confirm it now supplies a value.',
+        check:
+          'Find code that builds objects without this field and confirm it now supplies a value.',
       };
     case 'schema_removed':
       return {
         why: 'A schema present in the old supplied specification is absent in the new one.',
-        check: 'Find code and types that reference this schema and confirm how they should handle its absence.',
+        check:
+          'Find code and types that reference this schema and confirm how they should handle its absence.',
       };
     case 'expandable_field_removed':
       return {
         why: 'A field that could be expanded is absent in the new supplied specification.',
-        check: 'Find expand arrays and field reads that name this field and confirm how they should handle its absence.',
+        check:
+          'Find expand arrays and field reads that name this field and confirm how they should handle its absence.',
       };
     case 'expandable_target_removed':
       return {
         why: 'A target that could be expanded is no longer listed for this field in the supplied specification.',
-        check: 'Find expand arrays that name this target and confirm how they should handle its absence.',
+        check:
+          'Find expand arrays that name this target and confirm how they should handle its absence.',
       };
     case 'parameter_removed':
       return {
@@ -52,7 +57,8 @@ export function explainChange(kind: ChangeKind): ChangeExplanation {
     case 'parameter_renamed':
       return {
         why: "A request parameter's name changed between the supplied specifications.",
-        check: 'Find calls that pass the old name and confirm whether they should use the new name.',
+        check:
+          'Find calls that pass the old name and confirm whether they should use the new name.',
       };
     case 'parameter_became_required':
       return {
@@ -62,22 +68,26 @@ export function explainChange(kind: ChangeKind): ChangeExplanation {
     case 'parameter_type_changed':
       return {
         why: "A request parameter's declared type differs between the supplied specifications.",
-        check: 'Find calls that pass this parameter and confirm the values still match the new type.',
+        check:
+          'Find calls that pass this parameter and confirm the values still match the new type.',
       };
     case 'parameter_enum_value_removed':
       return {
         why: 'A value the old supplied specification allowed for a parameter is no longer listed.',
-        check: 'Find calls that pass this value and confirm which value is documented as supported.',
+        check:
+          'Find calls that pass this value and confirm which value is documented as supported.',
       };
     case 'request_body_removed':
       return {
         why: 'The request body for an operation is absent in the new supplied specification.',
-        check: 'Find calls that send a body to this operation and confirm how they should handle that.',
+        check:
+          'Find calls that send a body to this operation and confirm how they should handle that.',
       };
     case 'response_removed':
       return {
         why: 'A response shape for an operation is absent in the new supplied specification.',
-        check: 'Find code that reads fields from that response and confirm how it handles its absence.',
+        check:
+          'Find code that reads fields from that response and confirm how it handles its absence.',
       };
     case 'endpoint_removed':
       return {
@@ -92,7 +102,8 @@ export function explainChange(kind: ChangeKind): ChangeExplanation {
     case 'enum_value_removed':
       return {
         why: 'A value the old supplied specification allowed for a field is no longer listed.',
-        check: 'Find code that reads or writes this value and confirm which value is documented as supported.',
+        check:
+          'Find code that reads or writes this value and confirm which value is documented as supported.',
       };
     default: {
       const exhaustive: never = kind;

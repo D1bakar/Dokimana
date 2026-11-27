@@ -8,12 +8,7 @@ export interface ProviderSource {
 }
 
 export type ChangeContext =
-  | 'schema'
-  | 'operation'
-  | 'request_parameter'
-  | 'request_body'
-  | 'response'
-  | 'webhook_event';
+  'schema' | 'operation' | 'request_parameter' | 'request_body' | 'response' | 'webhook_event';
 
 export type ChangeKind =
   | 'field_removed'
@@ -51,12 +46,7 @@ export interface ChangeRecord {
 }
 
 export type CallSiteKind =
-  | 'sdk_call'
-  | 'sdk_field'
-  | 'typed_field'
-  | 'expand_array'
-  | 'webhook_handler'
-  | 'helper_wrapper';
+  'sdk_call' | 'sdk_field' | 'typed_field' | 'expand_array' | 'webhook_handler' | 'helper_wrapper';
 
 export interface CallSite {
   file: string;

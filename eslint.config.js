@@ -10,7 +10,24 @@ export default [
       'node_modules/**',
       'coverage/**',
       'site/**',
+      'fixtures/**',
+      'benchmarks/projects/**',
     ],
+  },
+  {
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        performance: 'readonly',
+        fetch: 'readonly',
+        Response: 'readonly',
+        NodeJS: 'readonly',
+      },
+    },
   },
   eslint.configs.recommended,
   {
@@ -18,13 +35,6 @@ export default [
     languageOptions: {
       parser: tsParser,
       parserOptions: { project: './tsconfig.json', sourceType: 'module' },
-      globals: {
-        console: 'readonly',
-        process: 'readonly',
-        Buffer: 'readonly',
-        setTimeout: 'readonly',
-        clearTimeout: 'readonly',
-      },
     },
     plugins: { '@typescript-eslint': tseslint },
     rules: {

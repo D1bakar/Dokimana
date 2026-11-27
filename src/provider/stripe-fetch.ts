@@ -34,7 +34,9 @@ export function validateCommit(commit: string): void {
 
 export function validateVersion(version: string): void {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(version)) {
-    throw new Error('--version must be a plain Stripe API version string such as 2026-11-18.endive.');
+    throw new Error(
+      '--version must be a plain Stripe API version string such as 2026-11-18.endive.',
+    );
   }
 }
 

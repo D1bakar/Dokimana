@@ -1,18 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import type { Dirent } from 'node:fs';
 import { extname, relative, resolve, sep } from 'node:path';
-import {
-  Node,
-  Project,
-  ScriptKind,
-  SyntaxKind,
-  type SourceFile,
-} from 'ts-morph';
-import type {
-  ChangeRecord,
-  ImpactReport,
-  NeedsHumanItem,
-} from '../domain/types.js';
+import { Node, Project, ScriptKind, SyntaxKind, type SourceFile } from 'ts-morph';
+import type { ChangeRecord, ImpactReport, NeedsHumanItem } from '../domain/types.js';
+import { toPosixPath } from '../util/paths.js';
 
 export type MappingValue = string | null;
 export type MappingsFile = Record<string, MappingValue>;
@@ -50,12 +41,7 @@ const ELIGIBLE_CONTEXTS: ReadonlySet<string> = new Set<string>([
   'response',
   'webhook_event',
 ]);
-const SOURCE_EXTENSIONS: ReadonlySet<string> = new Set<string>([
-  '.ts',
-  '.tsx',
-  '.js',
-  '.jsx',
-]);
+const SOURCE_EXTENSIONS: ReadonlySet<string> = new Set<string>(['.ts', '.tsx', '.js', '.jsx']);
 const IGNORED_DIRECTORIES: ReadonlySet<string> = new Set<string>([
   '.git',
   'coverage',
@@ -63,13 +49,11 @@ const IGNORED_DIRECTORIES: ReadonlySet<string> = new Set<string>([
   'node_modules',
   'vendor',
 ]);
-const CHECKLIST =
-  'Checklist: [ ] callers; [ ] defaults; [ ] validation; [ ] tests.';
+const CHECKLIST = 'Checklist: [ ] callers; [ ] defaults; [ ] validation; [ ] tests.';
 const CONTEXT_LINES = 3;
 const MAX_LCS_CELLS = 4_000_000;
 const SIMPLE_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const SIMPLE_FIELD_PATH =
-  /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*|\[\])*$/;
+const SIMPLE_FIELD_PATH = /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*|\[\])*$/;
 const GENERATED_FILE_NAME = /(?:\.generated|\.gen|\.g)\.[cm]?[jt]sx?$/i;
 const SENSITIVE_PATTERNS: readonly RegExp[] = [
   /\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{8,}/g,
@@ -78,8 +62,7 @@ const SENSITIVE_PATTERNS: readonly RegExp[] = [
   /\bxox[baprs]-[A-Za-z0-9-]{10,}/g,
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g,
 ];
-const ABSOLUTE_PATH_PATTERN =
-  /[A-Za-z]:[\\/][^\s'"\r\n]+|\/(?:Users|home|var|tmp)\/[^\s'"\r\n]+/g;
+const ABSOLUTE_PATH_PATTERN = /[A-Za-z]:[\\/][^\s'"\r\n]+|\/(?:Users|home|var|tmp)\/[^\s'"\r\n]+/g;
 
 interface RenamePlan {
   status: 'rename';
@@ -141,10 +124,7 @@ interface NeedsHumanDraft {
 
 type DiffOp = { type: 'equal' | 'remove' | 'add'; value: string };
 
-export function assertMappingsFile(
-  value: unknown,
-  label: string,
-): asserts value is MappingsFile {
+export function assertMappingsFile(value: unknown, label: string): asserts value is MappingsFile {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new TypeError(`${label}: expected an object of field mappings`);
   }
@@ -185,9 +165,7 @@ export function suggestChanges(input: SuggestInput): SuggestResult {
     if (plan.status === 'human') addNeedsHuman(plan.change, plan.reason);
   }
 
-  const activePlans = plans.filter(
-    (plan): plan is ActivePlan => plan.status !== 'human',
-  );
+  const activePlans = plans.filter((plan): plan is ActivePlan => plan.status !== 'human');
   const project = new Project({
     useInMemoryFileSystem: true,
     skipAddingFilesFromTsConfig: true,
@@ -374,15 +352,17 @@ function lookupMapping(
   mappings: MappingsFile,
   resource: string,
   path: string,
-): { found: boolean; value: MappingValue | undefined } {
+): { found: false } | { found: true; value: MappingValue } {
   const scopedKey = `${resource}.${path}`;
   if (hasOwn(mappings, scopedKey)) {
-    return { found: true, value: mappings[scopedKey] };
+    const value = mappings[scopedKey];
+    return value === undefined ? { found: false } : { found: true, value };
   }
   if (hasOwn(mappings, path)) {
-    return { found: true, value: mappings[path] };
+    const value = mappings[path];
+    return value === undefined ? { found: false } : { found: true, value };
   }
-  return { found: false, value: undefined };
+  return { found: false };
 }
 
 function resolveConflicts(plans: Plan[]): void {
@@ -577,13 +557,9 @@ function collectFromBindingName(
   }
 }
 
-function collectFromAccess(
-  access: Node,
-  plan: ActivePlan,
-  text: string,
-  edits: Edit[],
-): void {
+function collectFromAccess(access: Node, plan: ActivePlan, text: string, edits: Edit[]): void {
   const chain = collectChain(access);
+  if (chain === undefined) return;
   const terminal = matchChainSuffix(chain, plan.segments);
   if (terminal === undefined) return;
 
@@ -625,10 +601,7 @@ function collectChain(node: Node): ChainSegment[] | undefined {
     if (argument === undefined) return undefined;
     let text: string | undefined;
     if (Node.isNumericLiteral(argument)) text = '[]';
-    else if (
-      Node.isStringLiteral(argument) ||
-      Node.isNoSubstitutionTemplateLiteral(argument)
-    ) {
+    else if (Node.isStringLiteral(argument) || Node.isNoSubstitutionTemplateLiteral(argument)) {
       text = argument.getLiteralValue();
     }
     if (text === undefined) return undefined;
@@ -650,10 +623,7 @@ function collectChain(node: Node): ChainSegment[] | undefined {
   return undefined;
 }
 
-function matchChainSuffix(
-  chain: ChainSegment[],
-  segments: string[],
-): ChainSegment | undefined {
+function matchChainSuffix(chain: ChainSegment[], segments: string[]): ChainSegment | undefined {
   if (chain.length < segments.length) return undefined;
   const offset = chain.length - segments.length;
   for (let index = 0; index < segments.length; index += 1) {
@@ -801,9 +771,7 @@ function dedupeEdits(edits: Edit[]): Edit[] {
   const seen = new Set<string>();
   const result: Edit[] = [];
   for (const edit of edits) {
-    const key = [edit.start, edit.end, edit.replacement, edit.changeId, edit.appliedKind].join(
-      '|',
-    );
+    const key = [edit.start, edit.end, edit.replacement, edit.changeId, edit.appliedKind].join('|');
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(edit);
@@ -824,18 +792,16 @@ function applyEdits(text: string, edits: Edit[]): string {
   return result + text.slice(cursor);
 }
 
-function buildPatch(
-  rewritten: Map<string, { oldText: string; newText: string }>,
-): { patch: string; filesChanged: number } {
+function buildPatch(rewritten: Map<string, { oldText: string; newText: string }>): {
+  patch: string;
+  filesChanged: number;
+} {
   const lines: string[] = [];
   let filesChanged = 0;
   for (const file of [...rewritten.keys()].sort(compareStrings)) {
     const content = rewritten.get(file);
     if (content === undefined) continue;
-    const hunks = buildUnifiedHunks(
-      splitLines(content.oldText),
-      splitLines(content.newText),
-    );
+    const hunks = buildUnifiedHunks(splitLines(content.oldText), splitLines(content.newText));
     if (hunks.length === 0) continue;
     filesChanged += 1;
     lines.push(`--- a/${file}`, `+++ b/${file}`, ...hunks);
@@ -1003,10 +969,6 @@ function collectSourceFiles(root: string): SourceFileEntry[] {
 
 function joinPath(directory: string, name: string): string {
   return `${directory}${directory.endsWith(sep) ? '' : sep}${name}`;
-}
-
-function toPosixPath(path: string): string {
-  return path.split(sep).join('/');
 }
 
 function scriptKindFor(file: string): ScriptKind {

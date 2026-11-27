@@ -31,7 +31,6 @@
     "/v1/customers/{id}": {
       "parameters": [{ "name": "api_version", "in": "query", "schema": { "type": "string" } }],
       "get": {
-        "operationId": "getCustomer",
         "parameters": [
           { "name": "expand", "in": "query", "schema": { "type": "string" } },
           { "name": "old_filter", "in": "query", "schema": { "type": "string" } }
@@ -40,7 +39,6 @@
     },
     "/v1/charges/{id}": {
       "delete": {
-        "operationId": "deleteCharge",
         "parameters": []
       }
     }
