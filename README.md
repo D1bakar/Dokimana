@@ -143,10 +143,11 @@ npm test
 npm run lint
 npm run format:check
 npm run perf:check
+npm run verify:supply
 npm run mutate
 ```
 
-`perf:check` enforces the measured benchmark budget in [docs/PERFORMANCE.md](docs/PERFORMANCE.md). Mutation testing is a separate, long-running check; its measured baseline and threshold are in [docs/MUTATION.md](docs/MUTATION.md). Site checks live in `site/` and run separately. Before contributing, keep changes focused, add a test for new behavior, and never include credentials or generated reports.
+`perf:check` enforces the measured benchmark budget in [docs/PERFORMANCE.md](docs/PERFORMANCE.md). `verify:supply` checks exact tool versions, action pins, and provenance wiring recorded in [docs/SUPPLY_CHAIN.md](docs/SUPPLY_CHAIN.md). Mutation testing is a separate, long-running check; its measured baseline and threshold are in [docs/MUTATION.md](docs/MUTATION.md). Site checks live in `site/` and run separately. Before contributing, keep changes focused, add a test for new behavior, and never include credentials or generated reports.
 
 ## Project documents
 
@@ -157,6 +158,7 @@ npm run mutate
 - [Design contract](DESIGN.md)
 - [Mutation baseline](docs/MUTATION.md)
 - [Performance baseline](docs/PERFORMANCE.md)
+- [Supply-chain controls](docs/SUPPLY_CHAIN.md)
 - [Site documentation](site/README.md)
 - [Contributor and agent guide](agent.md)
 - [Repository maintenance](MAINTAINING.md)
