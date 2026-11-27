@@ -142,10 +142,11 @@ npm run build
 npm test
 npm run lint
 npm run format:check
+npm run perf:check
 npm run mutate
 ```
 
-Mutation testing is a separate, long-running check; its measured baseline and threshold are in [docs/MUTATION.md](docs/MUTATION.md). Site checks live in `site/` and run separately. Before contributing, keep changes focused, add a test for new behavior, and never include credentials or generated reports.
+`perf:check` enforces the measured benchmark budget in [docs/PERFORMANCE.md](docs/PERFORMANCE.md). Mutation testing is a separate, long-running check; its measured baseline and threshold are in [docs/MUTATION.md](docs/MUTATION.md). Site checks live in `site/` and run separately. Before contributing, keep changes focused, add a test for new behavior, and never include credentials or generated reports.
 
 ## Project documents
 
@@ -155,6 +156,7 @@ Mutation testing is a separate, long-running check; its measured baseline and th
 - [Code of conduct](CODE_OF_CONDUCT.md)
 - [Design contract](DESIGN.md)
 - [Mutation baseline](docs/MUTATION.md)
+- [Performance baseline](docs/PERFORMANCE.md)
 - [Site documentation](site/README.md)
 - [Contributor and agent guide](agent.md)
 - [Repository maintenance](MAINTAINING.md)

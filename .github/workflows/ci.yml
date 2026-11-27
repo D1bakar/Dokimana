@@ -23,6 +23,7 @@ jobs:
       - run: npm test
       - run: npm run lint
       - run: npm run format:check
+      - run: npm run perf:check
       - name: Install pinned oasdiff
         run: |
           set -euo pipefail

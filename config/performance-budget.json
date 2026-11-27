@@ -1,0 +1,23 @@
+{
+  "workload": "checked-in synthetic Stripe spec pair, pre-parsed and pre-indexed",
+  "oldPath": "src/diff/fixtures/stripe-real-old.json",
+  "newPath": "src/diff/fixtures/stripe-real-new.json",
+  "iterations": 50,
+  "oldBytes": 11204,
+  "newBytes": 10512,
+  "changes": 16,
+  "baseline": {
+    "runs": 5,
+    "medianTotalMs": 38.985,
+    "medianAverageMs": 0.7797,
+    "maxTotalMs": 69.951,
+    "maxAverageMs": 1.399
+  },
+  "budget": {
+    "derivedFrom": "2x worst observed local run",
+    "factor": 2
+  },
+  "maxTotalMs": 139.902,
+  "maxAverageMs": 2.798,
+  "provenance": "docs/PERFORMANCE.md"
+}

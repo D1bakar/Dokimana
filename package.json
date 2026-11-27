@@ -49,6 +49,7 @@
     "docs:rules": "tsx scripts/generate-rules.ts",
     "oasdiff:corpus": "tsx scripts/oasdiff-corpus.ts",
     "mutate": "stryker run",
+    "perf:check": "tsx scripts/performance-gate.ts",
     "format": "prettier --write \"**/*.{ts,json,yml,yaml,md}\"",
     "format:check": "prettier --check \"**/*.{ts,json,yml,yaml,md}\""
   },
