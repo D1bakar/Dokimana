@@ -11,6 +11,7 @@ import {
   type OpenApiParameter,
   type SchemaField,
 } from './structured-diff.js';
+import { buildDirectionalIr, type DirectionalIr } from './ir.js';
 
 export interface ProviderFetcher {
   fetchOpenApi(provider: 'stripe', version: string): Promise<OpenApiInput>;
@@ -28,7 +29,13 @@ export interface ChangeDetectorInput {
 export interface IndexedChangeDetectorInput {
   oldIndex: OpenApiIndex;
   newIndex: OpenApiIndex;
+  oldVersion?: string;
   newVersion: string;
+  sourceKind?: 'openapi' | 'changelog';
+}
+
+export interface IrChangeDetectorInput {
+  ir: DirectionalIr;
   sourceKind?: 'openapi' | 'changelog';
 }
 
@@ -89,6 +96,7 @@ export class ChangeDetector {
       return this.diffIndexes({
         oldIndex: buildOpenApiIndex(input.oldDocument),
         newIndex: buildOpenApiIndex(input.newDocument),
+        oldVersion: input.oldVersion,
         newVersion: input.newVersion,
         ...(input.sourceKind === undefined ? {} : { sourceKind: input.sourceKind }),
       });
@@ -113,18 +121,31 @@ export class ChangeDetector {
   }
 
   diffIndexes(input: IndexedChangeDetectorInput): ChangeRecord[] {
+    const ir = buildDirectionalIr(
+      input.oldIndex,
+      input.newIndex,
+      input.oldVersion ?? input.oldIndex.document.info?.version ?? 'before',
+      input.newIndex.document.info?.version ?? input.newVersion,
+    );
+    return this.diffIr({
+      ir,
+      ...(input.sourceKind === undefined ? {} : { sourceKind: input.sourceKind }),
+    });
+  }
+
+  diffIr(input: IrChangeDetectorInput): ChangeRecord[] {
     const source: ProviderSource = {
       kind: input.sourceKind ?? 'openapi',
       provider: 'stripe',
-      version: input.newIndex.document.info?.version ?? input.newVersion,
-      checksumSha256: input.newIndex.checksumSha256,
+      version: input.ir.after.version,
+      checksumSha256: input.ir.after.checksumSha256,
     };
     const records: ChangeRecord[] = [];
     const record = this.recorder(records, source);
 
-    this.diffSchemas(input.oldIndex, input.newIndex, record);
-    this.diffOperations(input.oldIndex, input.newIndex, record);
-    this.diffWebhooks(input.oldIndex, input.newIndex, record);
+    this.diffSchemas(input.ir, record);
+    this.diffOperations(input.ir, record);
+    this.diffWebhooks(input.ir, record);
     return this.sort(records);
   }
 
@@ -141,17 +162,19 @@ export class ChangeDetector {
     return this.diff({ oldDocument, newDocument, oldVersion, newVersion });
   }
 
-  private diffSchemas(oldIndex: OpenApiIndex, newIndex: OpenApiIndex, record: Recorder): void {
-    for (const [resource, oldFields] of oldIndex.schemas) {
-      const newFields = newIndex.schemas.get(resource);
+  private diffSchemas(ir: DirectionalIr, record: Recorder): void {
+    const before = ir.before.index;
+    const after = ir.after.index;
+    for (const [resource, oldFields] of before.schemas) {
+      const newFields = after.schemas.get(resource);
       if (!newFields) {
         record('schema', resource, 'schema_removed', undefined, `schema:${resource}`, undefined);
         continue;
       }
       diffFieldMaps('schema', resource, oldFields, newFields, record);
 
-      const oldExpandable = new Set(oldIndex.expandableFields.get(resource) ?? []);
-      const newExpandable = new Set(newIndex.expandableFields.get(resource) ?? []);
+      const oldExpandable = new Set(before.expandableFields.get(resource) ?? []);
+      const newExpandable = new Set(after.expandableFields.get(resource) ?? []);
       for (const field of oldExpandable) {
         if (!newExpandable.has(field)) {
           record('schema', resource, 'expandable_field_removed', field, 'expandable', undefined);
@@ -172,13 +195,14 @@ export class ChangeDetector {
     }
   }
 
-  private diffOperations(oldIndex: OpenApiIndex, newIndex: OpenApiIndex, record: Recorder): void {
-    for (const oldOperation of uniquePathOperations(oldIndex)) {
+  private diffOperations(ir: DirectionalIr, record: Recorder): void {
+    const before = ir.before.index;
+    const after = ir.after.index;
+    for (const oldOperation of uniquePathOperations(before)) {
       const newOperation =
         (oldOperation.operationId
-          ? newIndex.operationsById.get(oldOperation.operationId)
-          : undefined) ??
-        newIndex.operationsByPath.get(oldOperation.route)?.get(oldOperation.method);
+          ? after.operationsById.get(oldOperation.operationId)
+          : undefined) ?? after.operationsByPath.get(oldOperation.route)?.get(oldOperation.method);
       const operation = operationLabel(oldOperation);
       if (!newOperation) {
         record(
@@ -236,9 +260,11 @@ export class ChangeDetector {
     }
   }
 
-  private diffWebhooks(oldIndex: OpenApiIndex, newIndex: OpenApiIndex, record: Recorder): void {
-    for (const [event, oldMethods] of oldIndex.webhooksByEvent) {
-      const newMethods = newIndex.webhooksByEvent.get(event);
+  private diffWebhooks(ir: DirectionalIr, record: Recorder): void {
+    const before = ir.before.index;
+    const after = ir.after.index;
+    for (const [event, oldMethods] of before.webhooksByEvent) {
+      const newMethods = after.webhooksByEvent.get(event);
       if (!newMethods) {
         record(
           'webhook_event',
