@@ -47,6 +47,7 @@
     "bench": "tsx scripts/accuracy-bench.ts",
     "lint": "eslint . --max-warnings=0",
     "docs:rules": "tsx scripts/generate-rules.ts",
+    "oasdiff:corpus": "tsx scripts/oasdiff-corpus.ts",
     "format": "prettier --write \"**/*.{ts,json,yml,yaml,md}\"",
     "format:check": "prettier --check \"**/*.{ts,json,yml,yaml,md}\""
   },
