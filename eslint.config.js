@@ -9,6 +9,8 @@ export default [
       'dist/**',
       'node_modules/**',
       'coverage/**',
+      '.stryker-tmp/**',
+      'reports/**',
       'site/**',
       'fixtures/**',
       'benchmarks/projects/**',

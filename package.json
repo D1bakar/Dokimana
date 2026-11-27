@@ -48,6 +48,7 @@
     "lint": "eslint . --max-warnings=0",
     "docs:rules": "tsx scripts/generate-rules.ts",
     "oasdiff:corpus": "tsx scripts/oasdiff-corpus.ts",
+    "mutate": "stryker run",
     "format": "prettier --write \"**/*.{ts,json,yml,yaml,md}\"",
     "format:check": "prettier --check \"**/*.{ts,json,yml,yaml,md}\""
   },
@@ -57,6 +58,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.16.0",
+    "@stryker-mutator/core": "9.6.1",
+    "@stryker-mutator/vitest-runner": "9.6.1",
     "@types/node": "^22.10.0",
     "@typescript-eslint/eslint-plugin": "^8.18.0",
     "@typescript-eslint/parser": "^8.18.0",

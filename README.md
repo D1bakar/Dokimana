@@ -142,9 +142,10 @@ npm run build
 npm test
 npm run lint
 npm run format:check
+npm run mutate
 ```
 
-Site checks live in `site/` and run separately. Before contributing, keep changes focused, add a test for new behavior, and never include credentials or generated reports.
+Mutation testing is a separate, long-running check; its measured baseline and threshold are in [docs/MUTATION.md](docs/MUTATION.md). Site checks live in `site/` and run separately. Before contributing, keep changes focused, add a test for new behavior, and never include credentials or generated reports.
 
 ## Project documents
 
@@ -153,6 +154,7 @@ Site checks live in `site/` and run separately. Before contributing, keep change
 - [Changelog](CHANGELOG.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 - [Design contract](DESIGN.md)
+- [Mutation baseline](docs/MUTATION.md)
 - [Site documentation](site/README.md)
 - [Contributor and agent guide](agent.md)
 - [Repository maintenance](MAINTAINING.md)

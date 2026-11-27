@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "npm",
+  "testRunner": "vitest",
+  "vitest": {
+    "configFile": "vitest.config.mjs",
+    "related": true
+  },
+  "reporters": ["progress", "clear-text", "json"],
+  "mutate": ["src/**/*.ts", "!src/**/*.test.ts", "!src/**/fixtures/**", "!src/domain/types.ts"],
+  "ignoreStatic": true,
+  "concurrency": 3,
+  "thresholds": {
+    "high": 33,
+    "low": 33,
+    "break": 33
+  }
+}
