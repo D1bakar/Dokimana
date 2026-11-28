@@ -11,9 +11,24 @@ Date: 2026-11-28. Environment: Node.js `v20.19.5`, Windows, four logical CPUs. E
 | Phase 4 branch head after push        | `0506a48cd220f286a47a9b79e0b5ea94b4e7f14c` |
 | Phase 3/4 merge conflicts encountered | `0`                                        |
 | Merge commits created                 | `0`                                        |
-| Phases 5 and 6 pushed                 | No; local commits only                     |
+| Phases 5 and 6 pushed                 | Yes; see post-report push verification     |
 
 Phase 3 and Phase 4 gates were rerun after their pushes and exited `0`.
+
+## Post-report push verification
+
+| Check                                          | Measured result                                      |
+| ---------------------------------------------- | ---------------------------------------------------- |
+| Feature push range                             | `0506a48..9ab064a`                                   |
+| Feature push exit code                         | `0`                                                  |
+| Feature head after Commit 19 push              | `9ab064a7e67206e5ee8fdc8a8fc07a9ecba94aef`           |
+| Remote `main` before update                    | `351ec11841c4cbad2f21d60133821ca682d7092c`           |
+| `main` update type                             | fast-forward `351ec11..9ab064a`                      |
+| `main` push exit code                          | `0`                                                  |
+| `main` head after push                         | `9ab064a7e67206e5ee8fdc8a8fc07a9ecba94aef`           |
+| Conflicts encountered during the `main` update | `0`                                                  |
+| Post-push gates on `main`, all exit codes      | `0`                                                  |
+| Post-push `perf:check` on `main`               | 62.324 ms total, 1.2465 ms average for 50 iterations |
 
 ## Final gate run
 
@@ -150,4 +165,4 @@ No Scorecard score, badge value, npm publish provenance attestation, or CI resul
 
 ## Handoff boundary
 
-This report records local measurements and locally observed configuration only. Phases 5 and 6 stop at local Commit 19 and were not pushed.
+This report records local measurements and locally observed configuration only. Phases 5 and 6 were pushed to the feature branch and to `main` after Commit 19; the measured push results are recorded above.
