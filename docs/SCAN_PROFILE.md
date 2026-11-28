@@ -71,6 +71,23 @@ An earlier three-run measurement of the same change reported a `9,147.08 ms` med
 
 The first iteration remains cold because it reads 5,000 files from disk: `64,441.47 ms` in the confirmation run. That is still lower than the `99,453.70 ms` cold baseline.
 
+## Optimization 2: lazy-load verifier command dependencies
+
+The `scan` command never verifies scenarios, but `src/cli.ts` statically imported `StripeMockVerifier`, `Verifier`, and `DockerNotConfiguredRunner`. Those three modules are now imported only inside the `verify` handler after argument validation. Scanner code is unchanged, so the 5,000-file scan profile from Optimization 1 still applies.
+
+Two `scan` CLI invocations, matching the workload in `src/cli.test.ts`, were measured before and after:
+
+| Metric                                    | Before      | After       | Change      |
+| ----------------------------------------- | ----------- | ----------- | ----------- |
+| Two-invocation wall time, sample 1        | 8,469.67 ms | 5,890.09 ms | 30.5% lower |
+| Two-invocation wall time, sample 2        | 7,697.66 ms | 6,105.46 ms | 20.7% lower |
+| Peak working set per invocation, sample 1 | 221.85 MB   | 203.94 MB   | 8.1% lower  |
+| Peak working set per invocation, sample 2 | 206.70 MB   | 211.67 MB   | 2.4% higher |
+
+The full `npm test` suite passes after the change; `src/cli.test.ts` completed in 8,974 ms in one suite run and 12,820 ms in another, both below its existing 15,000 ms limit. The memory samples vary with OS page retention, so the stable result is runtime headroom rather than a guaranteed RSS reduction.
+
+Two AST-caching experiments were measured and rejected. Caching six `FileScan` descendant lists raised the two-invocation CLI time to 9,019.40 ms and 8,710.51 ms, and `src/cli.test.ts` timed out at its existing 15,000 ms limit under full-suite load. A single-pass analyzer traversal reduced CLI time to 5,459.29 ms and 6,016.23 ms but raised median 5,000-file `buildIndex` time from 4,574.54 ms to 8,217.22 ms. Neither experiment is in the committed code; the existing test timeout and assertions were not changed.
+
 ## Limitations
 
 This is a synthetic corpus on one Windows machine, not a real repository or a release target. The generated files are small and structurally similar. The profile describes this local workload only.

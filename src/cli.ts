@@ -18,11 +18,8 @@ import { assertOpenApiInput, type OpenApiInput } from './diff/structured-diff.js
 import { fetchStripeSpec, type StripeSpecChannel } from './provider/stripe-fetch.js';
 import { createConfigFile } from './config/init.js';
 import { assertMappingsFile, suggestChanges, type MappingsFile } from './suggest/suggest.js';
-import { StripeMockVerifier } from './verifier/stripe-mock-runner.js';
 import type { EvidenceReport, ImpactReport, Scenario } from './domain/types.js';
 import { err, ok, type Result } from './domain/result.js';
-import { DockerNotConfiguredRunner } from './verifier/container-runner.js';
-import { Verifier } from './verifier/verifier.js';
 
 type ReportFormat = 'json' | 'markdown' | 'sarif' | 'html';
 type FailOn = ChangeSeverity | 'none';
@@ -232,6 +229,13 @@ program
       return;
     }
 
+    const [{ StripeMockVerifier }, { DockerNotConfiguredRunner }, { Verifier }] = await Promise.all(
+      [
+        import('./verifier/stripe-mock-runner.js'),
+        import('./verifier/container-runner.js'),
+        import('./verifier/verifier.js'),
+      ],
+    );
     const result =
       options.oldSpec && options.newSpec
         ? await new StripeMockVerifier({
