@@ -1,6 +1,7 @@
 import * as guards from './node-guards.js';
 import type { NodeLike } from './node-guards.js';
 import { readdir } from 'node:fs/promises';
+import { performance } from 'node:perf_hooks';
 import { extname, join, relative, resolve } from 'node:path';
 import {
   Project,
@@ -51,6 +52,32 @@ const FIELD_LEVEL_KINDS: ReadonlySet<ChangeKind> = new Set<ChangeKind>([
 const EVENT_TYPE = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_.]*$/;
 const INLINE_CLIENT = '<inline>';
 const MAX_SNIPPET_LENGTH = 240;
+
+export type ScanPhaseName =
+  'collectSources' | 'createProject' | 'buildIndex' | 'scanFiles' | 'buildReport';
+
+export interface MemorySnapshot {
+  readonly heapUsedBytes: number;
+  readonly rssBytes: number;
+}
+
+export interface ScanPhaseMeasurement {
+  readonly name: ScanPhaseName;
+  readonly durationMs: number;
+  readonly before: MemorySnapshot;
+  readonly after: MemorySnapshot;
+}
+
+export interface ScanProfile {
+  readonly sourceFileCount: number;
+  readonly phases: readonly ScanPhaseMeasurement[];
+  readonly before: MemorySnapshot;
+  readonly after: MemorySnapshot;
+}
+
+export interface ScanOptions {
+  readonly onProfile?: (profile: ScanProfile) => void;
+}
 
 type FieldContext = 'request' | 'response' | 'typed' | 'webhook' | 'expand';
 
@@ -104,55 +131,89 @@ interface FindingInput {
 }
 
 export class RepoScanner {
-  async scan(root: string, changes: ChangeRecord[]): Promise<ImpactReport> {
+  async scan(
+    root: string,
+    changes: ChangeRecord[],
+    options: ScanOptions = {},
+  ): Promise<ImpactReport> {
+    const before = memorySnapshot();
+    const phases: ScanPhaseMeasurement[] = [];
+    const measure = async <T>(name: ScanPhaseName, run: () => T | Promise<T>): Promise<T> => {
+      const phaseBefore = memorySnapshot();
+      const startedAt = performance.now();
+      const value = await run();
+      phases.push({
+        name,
+        durationMs: performance.now() - startedAt,
+        before: phaseBefore,
+        after: memorySnapshot(),
+      });
+      return value;
+    };
+
     const repositoryRoot = resolve(root);
-    const sourcePaths = await collectSourceFiles(repositoryRoot);
-    const project = new Project({
-      skipAddingFilesFromTsConfig: true,
-      skipFileDependencyResolution: true,
-      compilerOptions: { allowJs: true, target: ScriptTarget.Latest },
+    const sourcePaths = await measure('collectSources', () => collectSourceFiles(repositoryRoot));
+    const project = await measure('createProject', () => {
+      const created = new Project({
+        skipAddingFilesFromTsConfig: true,
+        skipFileDependencyResolution: true,
+        compilerOptions: { allowJs: true, target: ScriptTarget.Latest },
+      });
+      if (sourcePaths.length > 0) created.addSourceFilesAtPaths(sourcePaths);
+      return created;
     });
-    if (sourcePaths.length > 0) project.addSourceFilesAtPaths(sourcePaths);
+    const factsByFile = await measure('buildIndex', () => buildProjectIndex(project));
+    const scanned = await measure('scanFiles', () => {
+      const fieldChanges = changes.filter(
+        (change) => FIELD_LEVEL_KINDS.has(change.kind) && change.path !== undefined,
+      );
+      const needsHuman = changes
+        .filter((change) => !fieldChanges.includes(change))
+        .map(buildNeedsHumanItem);
+      const findings: ImpactFinding[] = [];
+      const unresolved: UnresolvedItem[] = [];
+      const sourceFiles = [...project.getSourceFiles()].sort((left, right) =>
+        left.getFilePath().localeCompare(right.getFilePath()),
+      );
 
-    const factsByFile = buildProjectIndex(project);
-    const fieldChanges = changes.filter(
-      (change) => FIELD_LEVEL_KINDS.has(change.kind) && change.path !== undefined,
-    );
-    const needsHuman = changes
-      .filter((change) => !fieldChanges.includes(change))
-      .map(buildNeedsHumanItem);
-
-    const findings: ImpactFinding[] = [];
-    const unresolved: UnresolvedItem[] = [];
-    const sourceFiles = [...project.getSourceFiles()].sort((left, right) =>
-      left.getFilePath().localeCompare(right.getFilePath()),
-    );
-
-    for (const sourceFile of sourceFiles) {
-      const file = resolve(sourceFile.getFilePath());
-      const relativeFile = toPosixPath(relative(repositoryRoot, file));
-      const facts = factsByFile.get(normalizePath(file));
-      if (!facts) continue;
-      const result = new FileScan({
-        sourceFile,
-        file: relativeFile,
-        facts,
-        changes: fieldChanges,
-        allChanges: changes,
-      }).run();
-      findings.push(...result.findings);
-      unresolved.push(...result.unresolved);
-    }
-
-    return {
+      for (const sourceFile of sourceFiles) {
+        const file = resolve(sourceFile.getFilePath());
+        const relativeFile = toPosixPath(relative(repositoryRoot, file));
+        const facts = factsByFile.get(normalizePath(file));
+        if (!facts) continue;
+        const result = new FileScan({
+          sourceFile,
+          file: relativeFile,
+          facts,
+          changes: fieldChanges,
+          allChanges: changes,
+        }).run();
+        findings.push(...result.findings);
+        unresolved.push(...result.unresolved);
+      }
+      return { fieldChanges, needsHuman, findings, unresolved };
+    });
+    const report = await measure('buildReport', () => ({
       generatedAt: new Date().toISOString(),
       root: toPosixPath(repositoryRoot),
       changes,
-      findings: dedupeFindings(findings).sort(compareFindings),
-      needsHuman,
-      unresolved: dedupeUnresolved(unresolved).sort(compareUnresolved),
-      unverifiedCallSiteCoverage: buildCoverageNotes(needsHuman, unresolved, sourcePaths.length),
-    };
+      findings: dedupeFindings(scanned.findings).sort(compareFindings),
+      needsHuman: scanned.needsHuman,
+      unresolved: dedupeUnresolved(scanned.unresolved).sort(compareUnresolved),
+      unverifiedCallSiteCoverage: buildCoverageNotes(
+        scanned.needsHuman,
+        scanned.unresolved,
+        sourcePaths.length,
+      ),
+    }));
+
+    options.onProfile?.({
+      sourceFileCount: sourcePaths.length,
+      phases,
+      before,
+      after: memorySnapshot(),
+    });
+    return report;
   }
 }
 
@@ -1062,4 +1123,9 @@ async function collectSourceFiles(root: string): Promise<string[]> {
 
 function normalizePath(path: string): string {
   return path.replaceAll('\\', '/').toLowerCase();
+}
+
+function memorySnapshot(): MemorySnapshot {
+  const usage = process.memoryUsage();
+  return { heapUsedBytes: usage.heapUsed, rssBytes: usage.rss };
 }

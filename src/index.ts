@@ -20,6 +20,13 @@ export type {
 export { ChangeDetector } from './diff/change-detector.js';
 export { buildOpenApiIndex, resolveJsonPointer } from './diff/structured-diff.js';
 export { RepoScanner } from './scanner/repo-scanner.js';
+export type {
+  MemorySnapshot,
+  ScanOptions,
+  ScanPhaseMeasurement,
+  ScanPhaseName,
+  ScanProfile,
+} from './scanner/repo-scanner.js';
 export {
   assertImpactReport,
   buildEvidenceReport,

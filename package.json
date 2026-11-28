@@ -53,6 +53,8 @@
     "oasdiff:corpus": "tsx scripts/oasdiff-corpus.ts",
     "mutate": "stryker run",
     "perf:check": "tsx scripts/performance-gate.ts",
+    "profile:scan": "node --expose-gc --import tsx scripts/scan-profile.ts",
+    "profile:cpu:summary": "tsx scripts/summarize-cpu-profile.ts",
     "verify:supply": "tsx scripts/verify-supply-chain.ts",
     "format": "prettier --write \"**/*.{ts,json,yml,yaml,md}\"",
     "format:check": "prettier --check \"**/*.{ts,json,yml,yaml,md}\""

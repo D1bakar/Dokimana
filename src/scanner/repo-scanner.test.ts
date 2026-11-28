@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
-import { RepoScanner } from './repo-scanner.js';
+import { RepoScanner, type ScanProfile } from './repo-scanner.js';
 import type { ChangeKind, ChangeRecord, ProviderSource } from '../domain/types.js';
 
 const source: ProviderSource = {
@@ -121,5 +121,28 @@ describe('RepoScanner', () => {
     expect(
       report.unverifiedCallSiteCoverage.some((note) => note.includes('ignored directories')),
     ).toBe(true);
+  });
+
+  it('emits phase timings when profiling is requested', async () => {
+    let profile: ScanProfile | undefined;
+    await new RepoScanner().scan(
+      resolve('src/scanner/fixtures/positive'),
+      [change('legacy_name')],
+      {
+        onProfile: (value) => {
+          profile = value;
+        },
+      },
+    );
+
+    expect(profile?.sourceFileCount).toBe(1);
+    expect(profile?.phases.map((phase) => phase.name)).toEqual([
+      'collectSources',
+      'createProject',
+      'buildIndex',
+      'scanFiles',
+      'buildReport',
+    ]);
+    expect(profile?.phases.every((phase) => phase.durationMs >= 0)).toBe(true);
   });
 });
