@@ -1,170 +1,153 @@
-# Final quality report
+# Final quality report (measured)
 
-Date: 2026-11-27. Environment: Node.js `v20.19.5`, Windows, four logical CPUs. This report records measured results and unresolved limits; it is not a claim of complete coverage, runtime proof, adoption, or release readiness.
+Date: 2026-11-28. Environment: Node.js `v20.19.5`, Windows, four logical CPUs. Every number below comes from a local command, a checked-in fixture corpus, or a recorded `git ls-remote` result. No CI-only result, published-package result, or real Stripe traffic result is included.
 
-Safety boundary: no live Stripe key or API call was used. `scan` never fetches specifications or contacts Stripe. `fetch-spec` is a separate, explicit command that requires an exact API version and full upstream commit SHA. Unsupported changes stay `needs_human`. A clean scan is not proof that no call site was affected.
+## Push and conflict verification
 
-## Gate status
+| Check                                 | Measured result                            |
+| ------------------------------------- | ------------------------------------------ |
+| Phase 3 branch head after push        | `349a9cb33186605555360092c8156051f117a957` |
+| Phase 4 push exit code                | `0`                                        |
+| Phase 4 branch head after push        | `0506a48cd220f286a47a9b79e0b5ea94b4e7f14c` |
+| Phase 3/4 merge conflicts encountered | `0`                                        |
+| Merge commits created                 | `0`                                        |
+| Phases 5 and 6 pushed                 | No; local commits only                     |
 
-| Check                   | Result                                                                      |
-| ----------------------- | --------------------------------------------------------------------------- |
-| `npm run build`         | Pass                                                                        |
-| `npm test`              | Pass: 14 test files passed, 1 skipped; 92 tests passed, 1 pre-existing skip |
-| `npm run lint`          | Pass                                                                        |
-| `npm run format:check`  | Pass                                                                        |
-| `npm run perf:check`    | Pass: latest 41.019 ms total, 0.8204 ms average for 50 iterations           |
-| `npm run verify:supply` | Pass, with one reported first-party tag exception                           |
-| `npm run mutate`        | Measured baseline: **33.00%** mutation score; threshold set to 33           |
+Phase 3 and Phase 4 gates were rerun after their pushes and exited `0`.
 
-The skipped test is `src/verifier/stripe-mock-integration.test.ts`. It cleanly skips when Docker or the cached `stripe-mock` image is unavailable; no new skip or assertion change was added.
+## Final gate run
 
-## Measured evidence
+Measured on the Commit 18 tree before the documentation-only final report commit.
 
-### Mutation testing
+| Check                        | Result                                                                                 |
+| ---------------------------- | -------------------------------------------------------------------------------------- |
+| `npm run format:check`       | exit `0`                                                                               |
+| `npm run build`              | exit `0`                                                                               |
+| `npm test`                   | exit `0`; 15 test files passed, 1 skipped; 98 tests passed, 1 skipped                  |
+| `npm run lint`               | exit `0`                                                                               |
+| `npm run check:architecture` | exit `0`; no issues                                                                    |
+| `npm run check:cycles`       | exit `0`; no issues                                                                    |
+| `npm run check:dead-code`    | exit `0`; no issues                                                                    |
+| `npm run perf:check`         | exit `0`; 66.371 ms total, 1.3274 ms average for 50 iterations                         |
+| `npm run verify:supply`      | exit `0`; 6 workflows checked, 5 pinned actions, 1 first-party tag finding, 0 failures |
+| `npm run verify:determinism` | exit `0`; 4 byte comparisons identical, 4 `git diff --no-index` exit codes `0`         |
+| `npm run mutate`             | not rerun in Phases 3–6; earlier measured score 33.00%                                 |
 
-StrykerJS `9.6.1` with `@stryker-mutator/vitest-runner@9.6.1`, `ignoreStatic: true`, and `concurrency: 3`. The full baseline run took 56 minutes 36 seconds and exited `0`. Scope was `src/**/*.ts` excluding tests, fixtures, and type-only declarations.
+The skipped test is `src/verifier/stripe-mock-integration.test.ts`. No skip, threshold, lint rule, test timeout, or assertion was changed to make a gate pass.
 
-| Metric                   | Value               |
-| ------------------------ | ------------------- |
-| Mutants instrumented     | 6453                |
-| Static mutants ignored   | 481                 |
-| Mutants scored           | 5972                |
-| Killed                   | 1916                |
-| Timed out                | 55                  |
-| Survived                 | 1774                |
-| No coverage              | 2227                |
-| Errors                   | 0                   |
-| Mutation score (total)   | **33.00%**          |
-| Exact unrounded score    | 33.004018754186205% |
-| Mutation score (covered) | 52.63%              |
+The performance workload was the checked-in 11,204-byte / 10,512-byte fixture pair, pre-parsed and pre-indexed, with 50 iterations and 16 changes. Its recorded budget is 139.902 ms total and 2.798 ms average.
 
-The exact measured score is the provenance for `high`, `low`, and `break = 33` in `stryker.config.json`. No headroom was invented. A second full run after adding the threshold was not performed; that run is `not measured`. Details are in [MUTATION.md](MUTATION.md).
+## Determinism
 
-### Coverage
+Before this work, two scans differed only in the timestamp:
 
-Phase 1 coverage was measured on `src` only and was not rerun in Phase 2:
+```diff
+-  "generatedAt": "2026-11-28T15:51:24.588Z",
++  "generatedAt": "2026-11-28T15:51:27.455Z",
+```
 
-| Metric             | Value              |
-| ------------------ | ------------------ |
-| Statements / lines | 65.49% (3696/5643) |
-| Branches           | 69.88% (919/1315)  |
-| Functions          | 88.07% (229/260)   |
+Reports now contain `contentSha256` instead of `generatedAt`. Three fixture scans were run on Windows: two with the backslash path returned by `Resolve-Path`, and one with the same path converted to forward slashes. All three exited `0`.
 
-Site coverage is `not measured`. Coverage figures do not prove complete source-pattern coverage.
+| Run                  | `contentSha256`                                                    | Normalized root                                                            |
+| -------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| Windows path A       | `c91115bb298bc1728fb3b4a99f10de76ecb6a8f704806d872a23b0824047c6b2` | `C:/Users/PC/Desktop/D1bakar's/web/Dokimana/src/scanner/fixtures/positive` |
+| Windows path B       | `c91115bb298bc1728fb3b4a99f10de76ecb6a8f704806d872a23b0824047c6b2` | same                                                                       |
+| Forward-slash path C | `c91115bb298bc1728fb3b4a99f10de76ecb6a8f704806d872a23b0824047c6b2` | same                                                                       |
 
-### Accuracy benchmark
+`git diff --no-index` results:
 
-`npm run bench` over the 12 checked-in synthetic benchmark projects:
+| Files compared           | Exit code | Diff output |
+| ------------------------ | --------: | ----------- |
+| JSON A vs JSON B         |         0 | empty       |
+| Markdown A vs Markdown B |         0 | empty       |
+| JSON A vs JSON C         |         0 | empty       |
+| Markdown A vs Markdown C |         0 | empty       |
 
-| Metric                              | Value |
-| ----------------------------------- | ----- |
-| Expected findings                   | 21    |
-| Actual findings                     | 14    |
-| Exact finding matches               | 12    |
-| Missing findings listed in truth    | 9     |
-| Extra findings listed by comparison | 1     |
-| Expected unresolved cases           | 5     |
-| Exact unresolved matches            | 3     |
+`npm run verify:determinism` reproduced those results and removed its temporary directory. Details are in [DETERMINISM.md](DETERMINISM.md).
 
-These numbers describe the synthetic fixture corpus only. They are not precision or recall for real Stripe releases.
+## Large-repository scan profile
 
-### Performance
+The workload was a generated temporary repository with exactly 5,000 TypeScript files. Three iterations ran in one process.
 
-Five unprofiled local runs of the checked-in 11204-byte / 10512-byte fixture pair, 50 iterations of pre-parsed, pre-indexed diffing: median `38.985 ms` total and `0.7797 ms` average; worst `69.951 ms` total and `1.399 ms` average. The budget is twice the worst run: `139.902 ms` total and `2.798 ms` average. Two verification runs passed at `34.443 ms` total / `0.6889 ms` average and `41.019 ms` total / `0.8204 ms` average.
+| Metric                                | Baseline      | After direct loading                                | Change      |
+| ------------------------------------- | ------------- | --------------------------------------------------- | ----------- |
+| Median wall time                      | 31,128.70 ms  | 12,883.35 ms                                        | 58.6% lower |
+| Cold first run                        | 99,453.70 ms  | 64,441.47 ms                                        | 35.2% lower |
+| Median `collectSources`               | 20.34 ms      | not recorded separately in the confirmation summary |
+| Median `createProject`                | 22,935.01 ms  | 4,547.71 ms                                         | 80.2% lower |
+| Median `buildIndex`                   | 6,310.57 ms   | 4,574.54 ms                                         | 27.5% lower |
+| Median `scanFiles`                    | 3,667.48 ms   | 2,448.32 ms                                         | 33.2% lower |
+| Median `buildReport`                  | 18.80 ms      | not recorded separately in the confirmation summary |
+| Median whole-scan heap delta          | 314,928,792 B | 323,950,176 B                                       | 2.9% higher |
+| Heap after `createProject`, third run | 782,950,728 B | 144,956,672 B                                       | 81.5% lower |
+| RSS after `createProject`, third run  | 838,664,192 B | 250,675,200 B                                       | 70.1% lower |
 
-A CPU profile showed the largest self-time in module loading, profiler/runtime overhead, and single-document IR traversal. Worker threads were not added because the measured workload is sub-millisecond per iteration on the median run and there is no evidence that serialization and startup cost would be recovered. Large real Stripe specifications are `not measured`. Details are in [PERFORMANCE.md](PERFORMANCE.md).
+One CPU profile sampled 71,738.4 ms. Largest self-time frames were `readFileUtf8` 40,078.99 ms / 55.87%, all `picomatch.test` sites 5,109.35 ms / 7.12%, all `matcher` sites 2,041.07 ms / 2.85%, `tinyglobby` anonymous frames 1,600.72 ms / 2.23%, `pushFileFilter` 1,108.09 ms / 1.54%, `fdir.walk` 906.55 ms / 1.26%, and garbage collection 1,465.64 ms / 2.04%. Worker threads were not added because reading and glob expansion, not the analyzer phases, dominated the measured profile.
 
-### oasdiff corpus
+CLI startup was measured separately with two `scan` invocations:
 
-`oasdiff` is pinned to `v1.41.0` with Linux archive SHA-256 `96365453163118e6503eb71742643d9ee67f91aedbaadd1a1ce9c6213e3b71c7`. The corpus is synthetic and local; `npm run oasdiff:corpus` does not fetch anything. Of 40 pairs, the first 25 are triaged: 9 aligned, 2 partial, 6 gaps, and 8 out-of-scope. The remaining 15 are pending triage and are not evidence of coverage. See [DIVERGENCES.md](DIVERGENCES.md).
+| Metric                                    | Before      | After       | Change      |
+| ----------------------------------------- | ----------- | ----------- | ----------- |
+| Two-invocation wall time, sample 1        | 8,469.67 ms | 5,890.09 ms | 30.5% lower |
+| Two-invocation wall time, sample 2        | 7,697.66 ms | 6,105.46 ms | 20.7% lower |
+| Peak working set per invocation, sample 1 | 221.85 MB   | 203.94 MB   | 8.1% lower  |
+| Peak working set per invocation, sample 2 | 206.70 MB   | 211.67 MB   | 2.4% higher |
 
-### Rules and provenance
+Rejected measurements:
 
-There are 17 stable rule IDs, `DOK-001` through `DOK-017`, and `docs/RULES.md` is generated from the registry. Rule registration is not evidence that a change kind is detected. Exact dependency pins, action SHAs, and oasdiff checksum wiring are verified by `npm run verify:supply` and documented in [SUPPLY_CHAIN.md](SUPPLY_CHAIN.md).
+| Experiment                | Measured result                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------- |
+| Six-list `FileScan` cache | CLI 9,019.40 ms / 8,710.51 ms; `src/cli.test.ts` timed out at its existing 15,000 ms limit        |
+| Single-pass analyzer      | CLI 5,459.29 ms / 6,016.23 ms; median 5,000-file `buildIndex` 8,217.22 ms vs 4,574.54 ms baseline |
+| Six-traversal analyzer    | median 5,000-file wall time 19,287.93 ms                                                          |
 
-## Unresolved divergences
+Full provenance and limits are in [SCAN_PROFILE.md](SCAN_PROFILE.md).
 
-### oasdiff triaged non-aligned pairs
+## Accuracy, coverage, mutation, and comparison corpus
 
-| Pair     | Assessment   | Unresolved divergence                                                                                                          |
-| -------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| DOKC-001 | partial      | Field removal agrees, but oasdiff separates request and required-response surfaces while Dokimana reports one `field_removed`. |
-| DOKC-002 | gap          | Schema field rename is reported only as removal by both tools; no rename is identified.                                        |
-| DOKC-005 | gap          | oasdiff reports nothing for an unreferenced schema removal; Dokimana reports `schema_removed`.                                 |
-| DOKC-006 | gap          | oasdiff ignores `x-expandableFields`; Dokimana reports `expandable_field_removed`.                                             |
-| DOKC-007 | gap          | Neither tool reports removal of the `x-expansionResources` branch.                                                             |
-| DOKC-009 | gap          | Query parameter rename is reported only as removal by both tools; no rename is identified.                                     |
-| DOKC-011 | gap          | oasdiff reports nothing for a query parameter type change; Dokimana reports `parameter_type_changed`.                          |
-| DOKC-013 | partial      | Request body removal agrees, but Dokimana also reports removed body fields.                                                    |
-| DOKC-018 | out-of-scope | Neither tool reports a breaking change for an added schema field.                                                              |
-| DOKC-019 | out-of-scope | Neither tool reports a breaking change for an added query parameter.                                                           |
-| DOKC-020 | out-of-scope | Neither tool reports a breaking change for an added response.                                                                  |
-| DOKC-021 | out-of-scope | Neither tool reports a breaking change for an added endpoint.                                                                  |
-| DOKC-022 | out-of-scope | Neither tool reports a breaking change for an added webhook.                                                                   |
-| DOKC-023 | out-of-scope | Neither tool reports a breaking change for a description edit.                                                                 |
-| DOKC-024 | out-of-scope | Neither tool reports a breaking change for an `operationId` edit.                                                              |
-| DOKC-025 | out-of-scope | Neither tool reports a breaking change for a summary edit.                                                                     |
+| Source                       | Measured result                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------- |
+| Accuracy bench, 12 projects  | 21 expected findings, 14 actual, 12 exact, 9 missing, 1 extra                         |
+| Accuracy bench unresolved    | 5 expected, 3 exact unresolved matches                                                |
+| Coverage, `src` only         | 65.49% statements/lines, 69.88% branches, 88.07% functions                            |
+| Mutation baseline            | 6,453 instrumented, 481 static ignored, 5,972 scored, 1,916 killed                    |
+| Mutation score               | 33.00%; exact score 33.004018754186205%; threshold 33                                 |
+| oasdiff corpus               | 40 pairs; 25 triaged: 9 aligned, 2 partial, 6 gaps, 8 out-of-scope                    |
+| oasdiff version and checksum | `v1.41.0`, SHA-256 `96365453163118e6503eb71742643d9ee67f91aedbaadd1a1ce9c6213e3b71c7` |
 
-The registered rename rules `DOK-002` and `DOK-009` do not yet produce rename findings in this corpus.
+Rule registry: 17 stable IDs, `DOK-001` through `DOK-017`.
 
-### oasdiff pairs pending triage
+Measured divergences that remain unresolved are recorded in [DIVERGENCES.md](DIVERGENCES.md): 15 pairs (`DOKC-026` through `DOKC-040`) remain pending triage; renames are not produced by `DOK-002` or `DOK-009`; `x-expandableFields`, `x-expansionResources`, and query parameter type gaps remain in the triaged set.
 
-| Pair     | Change                       |
-| -------- | ---------------------------- |
-| DOKC-026 | nullable added               |
-| DOKC-027 | oneOf branch removed         |
-| DOKC-028 | allOf branch removed         |
-| DOKC-029 | anyOf branch removed         |
-| DOKC-030 | readOnly added               |
-| DOKC-031 | writeOnly added              |
-| DOKC-032 | deprecated added             |
-| DOKC-033 | format changed               |
-| DOKC-034 | pattern added                |
-| DOKC-035 | minLength set                |
-| DOKC-036 | maxLength set                |
-| DOKC-037 | default removed              |
-| DOKC-038 | example removed              |
-| DOKC-039 | additionalProperties allowed |
-| DOKC-040 | server URL changed           |
+## Supply-chain configuration status
 
-### Accuracy benchmark divergences
+`npm run verify:supply` exited `0` on the Commit 18 tree.
 
-Missing findings:
+| Setting                           | Locally observed value                                |
+| --------------------------------- | ----------------------------------------------------- |
+| `id-token: write` in release      | `true`                                                |
+| `--provenance` in publish command | `true`                                                |
+| npm provenance status             | configured, not yet verified in CI                    |
+| Scorecard workflow present        | `true`                                                |
+| Scorecard action pin              | `23f22cd43608bae7a1f1fa2603d7314dee9538a5` (`v2.6.0`) |
+| Scorecard SARIF output            | `true`                                                |
+| Scorecard publish results         | `true`                                                |
+| Scorecard OIDC permission         | `true`                                                |
+| Scorecard status                  | configured, not yet verified in CI                    |
+| First-party tag findings          | `dokimana-example.yml: D1bakar/Dokimana@v1`           |
 
-- `express-retrieve`: `src/retrieve-customer.ts|account_balance`, `src/retrieve-customer.ts|phone`
-- `next-route-handler`: `src/app/api/customers/[id]/route.ts|expand: default_source`
-- `serverless-handler`: `src/handler.ts|phone`
-- `cross-file-client`: `src/usage.ts|account_balance`
-- `expand-array`: `src/retrieve-customer.ts|expand: default_source`
-- `destructured-response`: `src/destructure.ts|balance`, `src/destructure.ts|email`, `src/destructure.ts|phone`
+No Scorecard score, badge value, npm publish provenance attestation, or CI result is claimed. No live Stripe key or API call was used; `scan` remained offline; unsupported changes remained `needs_human`; no public npm install or `npx` claim is made; site-generated reports remain placeholders until CI-generated data is checked in.
 
-Extra finding:
+## Suppressions and configuration exclusions
 
-- `serverless-handler`: `src/handler.ts|data.object.phone` instead of the expected `src/handler.ts|phone`.
-
-Other unresolved accuracy gaps:
-
-- `webhook-worker` reported 3 findings against 2 expected, with 2 exact matches; the comparison did not list an extra key for the count difference.
-- `dynamic-call` expected 4 unresolved cases and reported 3, with 2 exact unresolved matches.
-- `rest-fetch` matched 1 of 1 expected unresolved case.
-- Ten projects with no expected unresolved cases reported 2–3 honest `needs_human` records each; those records are not matched to truth expectations.
-
-### Scanner and verification limits
-
-- Dynamic SDK calls, direct REST/fetch calls, generated and vendor code, external or remote `$ref` values, path aliases, type annotations, and runtime values remain outside verified coverage.
-- Resource-level changes are reported as `needs_human` rather than guessed call sites.
-- An empty scan is not evidence of complete coverage; the scanner states inspected extensions and ignored directories.
-- `verify` reports `could_not_run` until a real isolated runner executes a scenario. The isolated `stripe-mock` scenario is `not measured` in this environment.
-- No repository code is executed by this version. The container stub is not presented as isolation.
-
-### Supply-chain and release limits
-
-- `.github/workflows/dokimana-example.yml` uses `D1bakar/Dokimana@v1`. No immutable `v1` tag was verifiable locally, so it is reported as an exception and is not SHA-pinned.
-- npm authentication or trusted publishing is not configured in this environment; OIDC provenance is not verified. A public `npm install` or `npx dokimana` claim is disallowed until those are configured and verified.
-- A release/publish run with provenance is `not measured`.
-- `npm audit` reports 13 vulnerabilities: 10 moderate, 1 high, and 2 critical. Production-only audit reports 3 moderate vulnerabilities. They were not changed in this phase.
-- Site data files remain `pending-generation` or `pending`; site-generated reports stay placeholders until CI-generated data is checked in.
+- No `eslint-disable`, `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, or `as any` was found in any Phase 4 or Phase 5/6 staged diff.
+- `src/scanner/fixtures/**` remains ESLint-ignored because those files are intentionally invalid scanner inputs.
+- One pre-existing `/* eslint-disable no-undef */` remains in `src/scanner/fixtures/require/client.js`.
+- `D1bakar/Dokimana@v1` remains a reported first-party supply-chain exception because no immutable `v1` tag SHA was verified locally.
+- Existing generated/dependency ignores remain: `dist/**`, `node_modules/**`, `coverage/**`, `.stryker-tmp/**`, `reports/**`, `site/**`, `fixtures/**`, `benchmarks/projects/**`.
+- The architecture checker excludes fixtures and tests from the dependency graph but loads tests and `eslint.config.js` as consumers.
+- One pre-existing skipped test remains: `src/verifier/stripe-mock-integration.test.ts`.
 
 ## Handoff boundary
 
-Phase 2 stops after this report. Mutation, performance, supply-chain, and accuracy figures above come from local measurements or checked-in fixture corpora, not from a published release or real Stripe traffic. No tests, thresholds, lint rules, skips, or assertions were loosened to make a gate pass.
+This report records local measurements and locally observed configuration only. Phases 5 and 6 stop at local Commit 19 and were not pushed.
