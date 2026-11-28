@@ -154,4 +154,14 @@ describe('RepoScanner', () => {
     expect(first.contentSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(first).not.toHaveProperty('generatedAt');
   });
+
+  it('normalizes Windows-style repository paths in the report root', async () => {
+    const normalized = resolve('src/scanner/fixtures/positive').replaceAll('\\', '/');
+    const simulated = process.platform === 'win32' ? normalized.replaceAll('/', '\\') : normalized;
+
+    const report = await new RepoScanner().scan(simulated, [change('legacy_name')]);
+
+    expect(report.root).toBe(normalized);
+    expect(report.root).not.toContain('\\');
+  });
 });
