@@ -21,6 +21,7 @@ GitHub Actions are pinned to immutable commit SHAs. The recorded pins are checke
 | `actions/checkout`                | `11d5960a326750d5838078e36cf38b85af677262` | v4      |
 | `actions/setup-node`              | `49933ea5288caeca8642d1e84afbd3f7d6820020` | v4      |
 | `changesets/action`               | `52025003bf4794281597cb5b5e566485d9473389` | v1.5.0  |
+| `ossf/scorecard-action`           | `23f22cd43608bae7a1f1fa2603d7314dee9538a5` | v2.6.0  |
 | `peter-evans/create-pull-request` | `22a9089034f40e5a961c8808d113e2c98fb63676` | v7      |
 
 One exception is reported, not treated as pinned: `.github/workflows/dokimana-example.yml` uses `D1bakar/Dokimana@v1` because no immutable `v1` tag was available to verify locally. Do not describe that example as SHA-pinned.
@@ -34,6 +35,10 @@ One exception is reported, not treated as pinned: `.github/workflows/dokimana-ex
 The release workflow requests `id-token: write` and passes `--provenance` to `npm publish`. It uses the locally installed Changesets CLI through `npm exec -- changeset version`; it does not bootstrap an unpinned `npx` or `npm install` command. `npm run verify:supply` checks both settings in the workflow and reports npm provenance as **configured, not yet verified in CI**. No publish or OIDC token was exercised locally.
 
 Publishing still requires repository-configured npm authentication or trusted publishing, which cannot be verified from this working tree. No public install or `npx dokimana` claim is made here.
+
+## Scorecard
+
+`.github/workflows/scorecard.yml` runs `ossf/scorecard-action` at the pinned commit above, writes SARIF, publishes results, and requests `id-token: write`. `npm run verify:supply` checks that wiring and reports Scorecard as **configured, not yet verified in CI**. No Scorecard score, badge value, or CI run result is claimed from this working tree.
 
 ## Safety boundary
 

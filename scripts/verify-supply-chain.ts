@@ -8,15 +8,19 @@ const CORPUS_PATH = resolve('scripts/oasdiff-corpus.ts');
 const DIVERGENCES_PATH = resolve('docs/DIVERGENCES.md');
 const CI_PATH = resolve('.github/workflows/ci.yml');
 const RELEASE_PATH = resolve('.github/workflows/release.yml');
+const SCORECARD_PATH = resolve('.github/workflows/scorecard.yml');
 
 const OASDIFF_VERSION = '1.41.0';
 const OASDIFF_LINUX_SHA256 = '96365453163118e6503eb71742643d9ee67f91aedbaadd1a1ce9c6213e3b71c7';
-const NPM_PROVENANCE_CONFIGURED_STATUS = 'configured, not yet verified in CI';
+const CONFIGURED_NOT_VERIFIED_STATUS = 'configured, not yet verified in CI';
+const SCORECARD_ACTION = 'ossf/scorecard-action';
+const SCORECARD_ACTION_SHA = '23f22cd43608bae7a1f1fa2603d7314dee9538a5'; // v2.6.0
 
 const PINNED_ACTIONS: Readonly<Record<string, string>> = {
   'actions/checkout': '11d5960a326750d5838078e36cf38b85af677262', // v4
   'actions/setup-node': '49933ea5288caeca8642d1e84afbd3f7d6820020', // v4
   'changesets/action': '52025003bf4794281597cb5b5e566485d9473389', // v1.5.0
+  'ossf/scorecard-action': SCORECARD_ACTION_SHA, // v2.6.0
   'peter-evans/create-pull-request': '22a9089034f40e5a961c8808d113e2c98fb63676', // v7
 };
 
@@ -168,6 +172,31 @@ if (/npm\s+install\b/.test(releaseSource)) {
 const npmProvenanceConfigured =
   releaseSource.includes('id-token: write') && releaseSource.includes('--provenance');
 
+let scorecardSource = '';
+try {
+  scorecardSource = await readFile(SCORECARD_PATH, 'utf8');
+} catch {
+  fail('scorecard.yml is missing.');
+}
+const scorecardWorkflowPresent = scorecardSource.length > 0;
+const scorecardPinnedAction = scorecardSource.includes(
+  `uses: ${SCORECARD_ACTION}@${SCORECARD_ACTION_SHA}`,
+);
+const scorecardSarif =
+  scorecardSource.includes('results_file: results.sarif') &&
+  scorecardSource.includes('results_format: sarif');
+const scorecardPublishing = scorecardSource.includes('publish_results: true');
+const scorecardIdToken = scorecardSource.includes('id-token: write');
+const scorecardConfigured =
+  scorecardWorkflowPresent &&
+  scorecardPinnedAction &&
+  scorecardSarif &&
+  scorecardPublishing &&
+  scorecardIdToken;
+if (scorecardWorkflowPresent && !scorecardConfigured) {
+  fail('Scorecard workflow must use the pinned action, SARIF output, publishing, and OIDC.');
+}
+
 console.log(
   JSON.stringify(
     {
@@ -179,8 +208,16 @@ console.log(
         idTokenWrite: releaseSource.includes('id-token: write'),
         publishFlag: releaseSource.includes('--provenance'),
         status: npmProvenanceConfigured
-          ? NPM_PROVENANCE_CONFIGURED_STATUS
+          ? CONFIGURED_NOT_VERIFIED_STATUS
           : 'configuration incomplete',
+      },
+      scorecard: {
+        workflowPresent: scorecardWorkflowPresent,
+        pinnedAction: scorecardPinnedAction,
+        sarifResults: scorecardSarif,
+        publishResults: scorecardPublishing,
+        idTokenWrite: scorecardIdToken,
+        status: scorecardConfigured ? CONFIGURED_NOT_VERIFIED_STATUS : 'configuration incomplete',
       },
       firstPartyTagFindings,
       failures,
