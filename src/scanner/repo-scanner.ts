@@ -1,6 +1,6 @@
 import * as guards from './node-guards.js';
 import type { NodeLike } from './node-guards.js';
-import { readdir } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 import { extname, join, relative, resolve } from 'node:path';
 import {
@@ -153,13 +153,16 @@ export class RepoScanner {
 
     const repositoryRoot = resolve(root);
     const sourcePaths = await measure('collectSources', () => collectSourceFiles(repositoryRoot));
-    const project = await measure('createProject', () => {
+    const project = await measure('createProject', async () => {
       const created = new Project({
         skipAddingFilesFromTsConfig: true,
         skipFileDependencyResolution: true,
         compilerOptions: { allowJs: true, target: ScriptTarget.Latest },
       });
-      if (sourcePaths.length > 0) created.addSourceFilesAtPaths(sourcePaths);
+      for (const filePath of sourcePaths) {
+        const text = await readFile(filePath, 'utf8');
+        created.createSourceFile(filePath, text, { overwrite: true });
+      }
       return created;
     });
     const factsByFile = await measure('buildIndex', () => buildProjectIndex(project));

@@ -51,6 +51,26 @@ The one-run CPU profile sampled `71,738.4 ms`. Largest self-time frames:
 
 The `picomatch`, `tinyglobby`, and `fdir` frames come from `ts-morph`'s glob expansion inside `addSourceFilesAtPaths`, even though the scanner already passes an explicit list of files. Together they account for about `12.3 s` of sampled self time. File reading plus glob matching is the bottleneck. The analyzer phases (`buildIndex` and `scanFiles`) are not the bottleneck, so worker threads are not introduced.
 
+## Optimization 1: load explicit files directly
+
+`RepoScanner.scan` already collects an explicit list of source paths, but passed that list to `project.addSourceFilesAtPaths`. `ts-morph` treats each entry as a glob pattern, which produced the `picomatch`, `tinyglobby`, and `fdir` self time in the CPU profile. The scanner now reads each collected path with `node:fs/promises.readFile` and calls `project.createSourceFile` directly.
+
+A confirmation run of `npm run profile:scan -- 3 5000` after this change produced:
+
+| Metric                                 | Baseline      | After direct loading | Change      |
+| -------------------------------------- | ------------- | -------------------- | ----------- |
+| Median wall time                       | 31,128.70 ms  | 12,883.35 ms         | 58.6% lower |
+| Median `createProject` time            | 22,935.01 ms  | 4,547.71 ms          | 80.2% lower |
+| Median `buildIndex` time               | 6,310.57 ms   | 4,574.54 ms          | 27.5% lower |
+| Median `scanFiles` time                | 3,667.48 ms   | 2,448.32 ms          | 33.2% lower |
+| Median whole-scan heap delta           | 314,928,792 B | 323,950,176 B        | 2.9% higher |
+| Heap after `createProject` (third run) | 782,950,728 B | 144,956,672 B        | 81.5% lower |
+| RSS after `createProject` (third run)  | 838,664,192 B | 250,675,200 B        | 70.1% lower |
+
+An earlier three-run measurement of the same change reported a `9,147.08 ms` median wall time and a `3,599.23 ms` median `createProject` phase. The warm runs vary with host load; both measurements are well below the baseline. The whole-scan heap delta is not a reliable peak metric because earlier iterations leave retained objects in the process. The per-phase snapshots show that avoiding glob expansion removes most of the transient heap and RSS growth during source-file creation.
+
+The first iteration remains cold because it reads 5,000 files from disk: `64,441.47 ms` in the confirmation run. That is still lower than the `99,453.70 ms` cold baseline.
+
 ## Limitations
 
 This is a synthetic corpus on one Windows machine, not a real repository or a release target. The generated files are small and structurally similar. The profile describes this local workload only.
