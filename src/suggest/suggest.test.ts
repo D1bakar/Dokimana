@@ -46,7 +46,7 @@ function makeChange(overrides: Partial<ChangeRecord> = {}): ChangeRecord {
 
 function makeReport(root: string, changes: ChangeRecord[]): ImpactReport {
   return {
-    generatedAt: '2026-01-01T00:00:00.000Z',
+    contentSha256: 'a'.repeat(64),
     root,
     changes,
     findings: [],

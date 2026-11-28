@@ -6,6 +6,7 @@ import type {
   VerificationResult,
 } from '../domain/types.js';
 import { explainChange, severityForChange, type ChangeSeverity } from './explanations.js';
+import { sha256Json } from '../util/content-hash.js';
 import { toPosixPath } from '../util/paths.js';
 
 const SEVERITIES: ChangeSeverity[] = ['high', 'medium', 'low'];
@@ -114,7 +115,7 @@ export function renderMarkdownReport(report: EvidenceReport): string {
     `- **Repository:** ${inlineCode(report.repository)}`,
     `- **Provider version:** ${inlineCode(report.providerVersion)}`,
     `- **Impact analysis:** **${report.impactAnalysis}**`,
-    `- **Generated:** ${inlineCode(report.generatedAt)}`,
+    `- **Content SHA-256:** ${inlineCode(report.contentSha256)}`,
     '',
     '## Summary',
     '',
@@ -214,10 +215,13 @@ export function renderMarkdownReport(report: EvidenceReport): string {
 
 export function assertImpactReport(value: unknown, label: string): asserts value is ImpactReport {
   if (!isRecord(value)) throw new Error(`${label} must be a JSON object.`);
-  for (const field of ['generatedAt', 'root'] as const) {
-    if (typeof value[field] !== 'string' || !value[field]) {
-      throw new Error(`${label} must include "${field}" as a non-empty string.`);
-    }
+  if (typeof value.root !== 'string' || !value.root) {
+    throw new Error(`${label} must include "root" as a non-empty string.`);
+  }
+  if (typeof value.contentSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(value.contentSha256)) {
+    throw new Error(
+      `${label} must include "contentSha256" as a lowercase 64-character hex string.`,
+    );
   }
   for (const field of [
     'changes',
@@ -238,8 +242,7 @@ export function buildEvidenceReport(input: {
   verification: VerificationResult[];
 }): EvidenceReport {
   const unresolved = Array.isArray(input.impact.unresolved) ? input.impact.unresolved : [];
-  return {
-    generatedAt: new Date().toISOString(),
+  const content: Omit<EvidenceReport, 'contentSha256'> = {
     repository: toPosixPath(input.repository),
     providerVersion: input.providerVersion,
     impactAnalysis: input.impact.findings.length > 0 ? 'static_evidence' : 'none',
@@ -261,6 +264,7 @@ export function buildEvidenceReport(input: {
       'Live Stripe APIs and live keys are never accessed by Dokimana.',
     ],
   };
+  return { contentSha256: sha256Json(content), ...content };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

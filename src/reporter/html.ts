@@ -403,7 +403,7 @@ export function renderHtml(report: EvidenceReport): string {
     repository: report.repository,
     providerVersion: report.providerVersion,
     impactAnalysis: report.impactAnalysis,
-    generatedAt: report.generatedAt,
+    contentSha256: report.contentSha256,
     limitations: report.limitations,
     resources: resourceNames,
   }).replaceAll('<', '\\u003c');
@@ -423,7 +423,7 @@ export function renderHtml(report: EvidenceReport): string {
 <div><dt>Repository</dt><dd>${escapeHtml(report.repository)}</dd></div>
 <div><dt>Provider version</dt><dd>${escapeHtml(report.providerVersion)}</dd></div>
 <div><dt>Impact analysis</dt><dd>${escapeHtml(report.impactAnalysis)}</dd></div>
-<div><dt>Generated at</dt><dd>${escapeHtml(report.generatedAt)}</dd></div>
+<div><dt>Content SHA-256</dt><dd>${escapeHtml(report.contentSha256)}</dd></div>
 </dl>
 </header>
 <section id="summary">

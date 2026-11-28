@@ -26,6 +26,7 @@ import type {
 } from '../domain/types.js';
 import { buildProjectIndex, type SourceFacts } from './project-index.js';
 import { mapSdkOperation, operationMatchesChange, type SdkOperation } from './sdk-map.js';
+import { sha256Json } from '../util/content-hash.js';
 import { toPosixPath } from '../util/paths.js';
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
@@ -196,19 +197,21 @@ export class RepoScanner {
       }
       return { fieldChanges, needsHuman, findings, unresolved };
     });
-    const report = await measure('buildReport', () => ({
-      generatedAt: new Date().toISOString(),
-      root: toPosixPath(repositoryRoot),
-      changes,
-      findings: dedupeFindings(scanned.findings).sort(compareFindings),
-      needsHuman: scanned.needsHuman,
-      unresolved: dedupeUnresolved(scanned.unresolved).sort(compareUnresolved),
-      unverifiedCallSiteCoverage: buildCoverageNotes(
-        scanned.needsHuman,
-        scanned.unresolved,
-        sourcePaths.length,
-      ),
-    }));
+    const report = await measure('buildReport', () => {
+      const content: Omit<ImpactReport, 'contentSha256'> = {
+        root: toPosixPath(repositoryRoot),
+        changes,
+        findings: dedupeFindings(scanned.findings).sort(compareFindings),
+        needsHuman: scanned.needsHuman,
+        unresolved: dedupeUnresolved(scanned.unresolved).sort(compareUnresolved),
+        unverifiedCallSiteCoverage: buildCoverageNotes(
+          scanned.needsHuman,
+          scanned.unresolved,
+          sourcePaths.length,
+        ),
+      };
+      return { contentSha256: sha256Json(content), ...content };
+    });
 
     options.onProfile?.({
       sourceFileCount: sourcePaths.length,

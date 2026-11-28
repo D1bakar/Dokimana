@@ -32,7 +32,7 @@ function change(overrides: Partial<ChangeRecord> = {}): ChangeRecord {
 
 function impact(changes: ChangeRecord[]): ImpactReport {
   return {
-    generatedAt: '2025-01-01T00:00:00.000Z',
+    contentSha256: 'a'.repeat(64),
     root: '/workspace/repo',
     changes,
     findings: [],
@@ -197,6 +197,24 @@ describe('renderTerminalReport', () => {
   });
 });
 
+describe('buildEvidenceReport', () => {
+  it('derives the same content hash from the same inputs', () => {
+    const input = {
+      repository: '/workspace/repo',
+      providerVersion: 'fixture',
+      impact: impact([change()]),
+      verification: [],
+    };
+
+    const first = buildEvidenceReport(input);
+    const second = buildEvidenceReport(input);
+
+    expect(first.contentSha256).toBe(second.contentSha256);
+    expect(first.contentSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(first).not.toHaveProperty('generatedAt');
+  });
+});
+
 describe('assertImpactReport', () => {
   it('rejects a JSON object that is not an impact report', () => {
     expect(() => {
@@ -206,7 +224,7 @@ describe('assertImpactReport', () => {
 
   it('normalizes older reports without a needsHuman array', () => {
     const value: unknown = {
-      generatedAt: '2025-01-01T00:00:00.000Z',
+      contentSha256: 'a'.repeat(64),
       root: '/workspace/repo',
       changes: [],
       findings: [],

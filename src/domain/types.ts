@@ -97,7 +97,7 @@ export interface UnresolvedItem {
 }
 
 export interface ImpactReport {
-  generatedAt: string;
+  contentSha256: string;
   root: string;
   changes: ChangeRecord[];
   findings: ImpactFinding[];
@@ -135,7 +135,7 @@ export interface VerificationResult {
 }
 
 export interface EvidenceReport {
-  generatedAt: string;
+  contentSha256: string;
   repository: string;
   providerVersion: string;
   impactAnalysis: 'static_evidence' | 'none';

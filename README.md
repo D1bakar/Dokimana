@@ -161,6 +161,7 @@ npm run mutate
 - [Mutation baseline](docs/MUTATION.md)
 - [Performance baseline](docs/PERFORMANCE.md)
 - [Quality report](docs/QUALITY_REPORT.md)
+- [Scan determinism](docs/DETERMINISM.md)
 - [Supply-chain controls](docs/SUPPLY_CHAIN.md)
 - [Site documentation](site/README.md)
 - [Contributor and agent guide](agent.md)

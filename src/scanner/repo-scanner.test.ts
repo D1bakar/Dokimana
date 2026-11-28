@@ -145,4 +145,13 @@ describe('RepoScanner', () => {
     ]);
     expect(profile?.phases.every((phase) => phase.durationMs >= 0)).toBe(true);
   });
+
+  it('produces the same content hash on repeated scans without timestamps', async () => {
+    const first = await scanFixture('positive', [change('legacy_name')]);
+    const second = await scanFixture('positive', [change('legacy_name')]);
+
+    expect(first.contentSha256).toBe(second.contentSha256);
+    expect(first.contentSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(first).not.toHaveProperty('generatedAt');
+  });
 });

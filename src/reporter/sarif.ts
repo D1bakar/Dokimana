@@ -311,7 +311,7 @@ export function renderSarif(report: EvidenceReport): string {
         tool: { driver: { name: 'Dokimana', rules } },
         results,
         properties: {
-          generatedAt: report.generatedAt,
+          contentSha256: report.contentSha256,
           repository: report.repository,
           providerVersion: report.providerVersion,
           impactAnalysis: report.impactAnalysis,

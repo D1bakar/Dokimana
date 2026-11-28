@@ -126,7 +126,7 @@ describe('property-based invariants', () => {
           relatedChangeIds: [change.id],
         };
         const report: EvidenceReport = {
-          generatedAt: '2025-01-01T00:00:00.000Z',
+          contentSha256: 'a'.repeat(64),
           repository: hostile,
           providerVersion: hostile,
           impactAnalysis: 'static_evidence',
