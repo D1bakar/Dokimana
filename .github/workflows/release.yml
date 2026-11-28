@@ -79,7 +79,7 @@ jobs:
       # Changesets detects .changeset/*.md files automatically. With changesets present it
       # opens a version PR; after that PR is merged it runs the publish script below.
       - name: Create version PR or publish to npm
-        uses: changesets/action@52025003bf4794281597cb5b5e566485d9473389 # v1.5.0
+        uses: changesets/action@746c25e23caa47dceb6a48ee85b4cbc5a9f5f293 # v1.5.0
         with:
           version: npm exec -- changeset version
           # npm publish --provenance --access public is the publish command. The wrapper skips
