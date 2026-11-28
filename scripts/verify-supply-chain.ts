@@ -11,6 +11,7 @@ const RELEASE_PATH = resolve('.github/workflows/release.yml');
 
 const OASDIFF_VERSION = '1.41.0';
 const OASDIFF_LINUX_SHA256 = '96365453163118e6503eb71742643d9ee67f91aedbaadd1a1ce9c6213e3b71c7';
+const NPM_PROVENANCE_CONFIGURED_STATUS = 'configured, not yet verified in CI';
 
 const PINNED_ACTIONS: Readonly<Record<string, string>> = {
   'actions/checkout': '11d5960a326750d5838078e36cf38b85af677262', // v4
@@ -164,6 +165,9 @@ if (/npm\s+install\b/.test(releaseSource)) {
   fail('Release workflow must not bootstrap unpinned npm installs.');
 }
 
+const npmProvenanceConfigured =
+  releaseSource.includes('id-token: write') && releaseSource.includes('--provenance');
+
 console.log(
   JSON.stringify(
     {
@@ -171,6 +175,13 @@ console.log(
       checkedWorkflows,
       exactDevDependencies: EXACT_DEV_DEPENDENCIES,
       pinnedActions: PINNED_ACTIONS,
+      npmProvenance: {
+        idTokenWrite: releaseSource.includes('id-token: write'),
+        publishFlag: releaseSource.includes('--provenance'),
+        status: npmProvenanceConfigured
+          ? NPM_PROVENANCE_CONFIGURED_STATUS
+          : 'configuration incomplete',
+      },
       firstPartyTagFindings,
       failures,
     },

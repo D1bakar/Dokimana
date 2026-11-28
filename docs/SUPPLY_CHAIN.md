@@ -31,9 +31,9 @@ One exception is reported, not treated as pinned: `.github/workflows/dokimana-ex
 
 ## Publishing boundary
 
-The release workflow requests `id-token: write` and passes `--provenance` to `npm publish`. It uses the locally installed Changesets CLI through `npm exec -- changeset version`; it does not bootstrap an unpinned `npx` or `npm install` command.
+The release workflow requests `id-token: write` and passes `--provenance` to `npm publish`. It uses the locally installed Changesets CLI through `npm exec -- changeset version`; it does not bootstrap an unpinned `npx` or `npm install` command. `npm run verify:supply` checks both settings in the workflow and reports npm provenance as **configured, not yet verified in CI**. No publish or OIDC token was exercised locally.
 
-Publishing still requires repository-configured npm authentication or trusted publishing, and provenance still requires verified OIDC. Neither is configured or verified in this working environment. No public install or `npx dokimana` claim is made here.
+Publishing still requires repository-configured npm authentication or trusted publishing, which cannot be verified from this working tree. No public install or `npx dokimana` claim is made here.
 
 ## Safety boundary
 
