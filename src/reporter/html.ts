@@ -27,10 +27,6 @@ interface HtmlItem {
   fields: HtmlField[];
 }
 
-interface EvidenceReportWithUnresolved extends EvidenceReport {
-  unresolved?: UnresolvedItem[];
-}
-
 const SEVERITY_RANK: Record<ChangeSeverity, number> = { high: 3, medium: 2, low: 1 };
 const SEVERITIES: ChangeSeverity[] = ['high', 'medium', 'low'];
 const STATUSES: ItemStatus[] = ['change', 'finding', 'needs-human', 'unresolved'];
@@ -61,7 +57,7 @@ function resourceLabel(value: string): string {
 }
 
 function readUnresolved(report: EvidenceReport): UnresolvedItem[] {
-  const value = (report as EvidenceReportWithUnresolved).unresolved;
+  const value = report.unresolved;
   return Array.isArray(value) ? value : [];
 }
 
@@ -120,7 +116,7 @@ function unresolvedSeverity(
     const change = changesById.get(id);
     if (!change) continue;
     const candidate = severityForChange(change.kind);
-    if ((SEVERITY_RANK[candidate] ?? 0) > (SEVERITY_RANK[severity] ?? 0)) severity = candidate;
+    if (SEVERITY_RANK[candidate] > SEVERITY_RANK[severity]) severity = candidate;
   }
   return severity;
 }
@@ -163,7 +159,7 @@ function renderRow(item: HtmlItem): string {
 function renderSeverityGroups(items: HtmlItem[]): string {
   return SEVERITIES.map((severity) => {
     const group = items.filter((item) => item.severity === severity);
-    const heading = `${severity} (${group.length})`;
+    const heading = `${severity} (${String(group.length)})`;
     const body =
       group.length === 0
         ? '<p class="empty">No items in this group.</p>'
@@ -184,7 +180,7 @@ function renderResourceGroups(items: HtmlItem[]): string {
   return names
     .map((name) => {
       const group = byResource.get(name) ?? [];
-      const heading = `${name} (${group.length})`;
+      const heading = `${name} (${String(group.length)})`;
       return `<section class="group"><h3>${escapeHtml(heading)}</h3>${group
         .map(renderItem)
         .join('')}</section>`;
@@ -304,7 +300,7 @@ export function renderHtml(report: EvidenceReport): string {
   for (const [index, change] of sortedChanges(report.changes).entries()) {
     const label = resourceLabel(change.resource);
     items.push({
-      key: `c-${index}`,
+      key: `c-${String(index)}`,
       status: 'change',
       severity: severityForChange(change.kind),
       resource: label,
@@ -331,12 +327,12 @@ export function renderHtml(report: EvidenceReport): string {
     const change = changesById.get(finding.changeId);
     const site = finding.callSite;
     items.push({
-      key: `f-${index}`,
+      key: `f-${String(index)}`,
       status: 'finding',
       severity: finding.confidence,
       resource: change ? resourceLabel(change.resource) : '(unlinked)',
       title: `Finding — ${site.operation}`,
-      location: `${site.file}:${site.line}:${site.column}`,
+      location: `${site.file}:${String(site.line)}:${String(site.column)}`,
       fields: [
         { label: 'Change id', value: finding.changeId },
         { label: 'Change kind', value: change?.kind ?? '' },
@@ -358,7 +354,7 @@ export function renderHtml(report: EvidenceReport): string {
   for (const [index, item] of sortedNeedsHuman(report.needsHuman).entries()) {
     const change = changesById.get(item.changeId);
     items.push({
-      key: `n-${index}`,
+      key: `n-${String(index)}`,
       status: 'needs-human',
       severity: severityForChange(item.kind),
       resource: resourceLabel(item.resource),
@@ -379,12 +375,12 @@ export function renderHtml(report: EvidenceReport): string {
 
   for (const [index, item] of sortedUnresolved(unresolved).entries()) {
     items.push({
-      key: `u-${index}`,
+      key: `u-${String(index)}`,
       status: 'unresolved',
       severity: unresolvedSeverity(item, changesById),
       resource: '(unresolved)',
       title: `Unresolved — ${item.kind}`,
-      location: `${item.file}:${item.line}:${item.column}`,
+      location: `${item.file}:${String(item.line)}:${String(item.column)}`,
       fields: [
         { label: 'Kind', value: item.kind },
         { label: 'Snippet', value: item.snippet, block: true },

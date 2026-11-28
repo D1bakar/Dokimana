@@ -51,7 +51,9 @@ describe('defaultConfig', () => {
 
 describe('assertDokimanaConfig', () => {
   it('accepts a generated config', () => {
-    expect(() => assertDokimanaConfig(defaultConfig(), 'fixture')).not.toThrow();
+    expect(() => {
+      assertDokimanaConfig(defaultConfig(), 'fixture');
+    }).not.toThrow();
   });
 
   const invalidCases: Array<{ name: string; value: unknown; message: string }> = [
@@ -90,8 +92,12 @@ describe('assertDokimanaConfig', () => {
   ];
 
   it.each(invalidCases)('rejects $name', ({ value, message }) => {
-    expect(() => assertDokimanaConfig(value, 'test.json')).toThrow(message);
-    expect(() => assertDokimanaConfig(value, 'test.json')).toThrow(/test\.json/);
+    expect(() => {
+      assertDokimanaConfig(value, 'test.json');
+    }).toThrow(message);
+    expect(() => {
+      assertDokimanaConfig(value, 'test.json');
+    }).toThrow(/test\.json/);
   });
 });
 

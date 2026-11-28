@@ -89,7 +89,7 @@ console.log(JSON.stringify({ projects }, null, 2));
 
 function makeChange(path: string, index: number): ChangeRecord {
   return {
-    id: `accuracy_change_${index}`,
+    id: `accuracy_change_${String(index)}`,
     provider: 'stripe',
     kind: 'field_removed',
     context: 'schema',
@@ -114,12 +114,12 @@ function parseManifest(value: unknown): ManifestEntry[] {
   if (!Array.isArray(value)) throw new Error('benchmarks/manifest.json must contain an array.');
   return value.map((entry, index) => {
     if (!isRecord(entry)) {
-      throw new Error(`benchmarks/manifest.json entry ${index} must be an object.`);
+      throw new Error(`benchmarks/manifest.json entry ${String(index)} must be an object.`);
     }
-    const name = requiredString(entry.name, `benchmarks/manifest.json entry ${index} name`);
+    const name = requiredString(entry.name, `benchmarks/manifest.json entry ${String(index)} name`);
     const description = requiredString(
       entry.description,
-      `benchmarks/manifest.json entry ${index} description`,
+      `benchmarks/manifest.json entry ${String(index)} description`,
     );
     return { name, description };
   });
@@ -132,22 +132,23 @@ function parseTruth(value: unknown, label: string): BenchmarkTruth {
   }
 
   const findings = value.findings.map((entry, index) => {
-    if (!isRecord(entry)) throw new Error(`${label} finding ${index} must be an object.`);
+    if (!isRecord(entry)) throw new Error(`${label} finding ${String(index)} must be an object.`);
     return {
-      file: requiredString(entry.file, `${label} finding ${index} file`),
-      fieldPath: requiredString(entry.fieldPath, `${label} finding ${index} fieldPath`),
-      operation: requiredString(entry.operation, `${label} finding ${index} operation`),
-      kind: requiredString(entry.kind, `${label} finding ${index} kind`),
-      confidence: parseConfidence(entry.confidence, `${label} finding ${index} confidence`),
+      file: requiredString(entry.file, `${label} finding ${String(index)} file`),
+      fieldPath: requiredString(entry.fieldPath, `${label} finding ${String(index)} fieldPath`),
+      operation: requiredString(entry.operation, `${label} finding ${String(index)} operation`),
+      kind: requiredString(entry.kind, `${label} finding ${String(index)} kind`),
+      confidence: parseConfidence(entry.confidence, `${label} finding ${String(index)} confidence`),
     };
   });
 
   const unresolved = value.unresolved.map((entry, index) => {
-    if (!isRecord(entry)) throw new Error(`${label} unresolved ${index} must be an object.`);
+    if (!isRecord(entry))
+      throw new Error(`${label} unresolved ${String(index)} must be an object.`);
     return {
-      file: requiredString(entry.file, `${label} unresolved ${index} file`),
-      kind: parseUnresolvedKind(entry.kind, `${label} unresolved ${index} kind`),
-      reason: requiredString(entry.reason, `${label} unresolved ${index} reason`),
+      file: requiredString(entry.file, `${label} unresolved ${String(index)} file`),
+      kind: parseUnresolvedKind(entry.kind, `${label} unresolved ${String(index)} kind`),
+      reason: requiredString(entry.reason, `${label} unresolved ${String(index)} reason`),
     };
   });
 

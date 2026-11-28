@@ -34,9 +34,9 @@ function httpResponse(status: number, body: unknown): string {
   const json = JSON.stringify(body);
   const reason = status === 200 ? 'OK' : 'Bad Request';
   return [
-    `HTTP/1.1 ${status} ${reason}`,
+    `HTTP/1.1 ${String(status)} ${reason}`,
     'Content-Type: application/json',
-    `Content-Length: ${Buffer.byteLength(json, 'utf8')}`,
+    `Content-Length: ${String(Buffer.byteLength(json, 'utf8'))}`,
     'Connection: close',
     '',
     json,
@@ -49,38 +49,48 @@ function fakeExecutor(options: FakeOptions): {
 } {
   const calls: Array<{ command: string; args: string[] }> = [];
   let runCount = 0;
-  const executor: CommandExecutor = async (command, args) => {
+  const executor: CommandExecutor = (command, args) => {
     calls.push({ command, args: [...args] });
-    if (command !== 'docker') return { exitCode: 1, stdout: '', stderr: '' };
+    let result: { exitCode: number; stdout: string; stderr: string };
 
-    const subcommand = args[0];
-    if (subcommand === 'version') {
-      return options.dockerMissing === true
-        ? { exitCode: 1, stdout: '', stderr: '' }
-        : { exitCode: 0, stdout: '27.0.0', stderr: '' };
-    }
-    if (subcommand === 'image') {
-      return options.imageMissing === true
-        ? { exitCode: 1, stdout: '', stderr: '' }
-        : { exitCode: 0, stdout: '[]', stderr: '' };
-    }
-    if (subcommand === 'run') {
-      runCount += 1;
-      return { exitCode: 0, stdout: `container-${runCount}`, stderr: '' };
-    }
-    if (subcommand === 'exec') {
-      const shellCommand = args.at(-1) ?? '';
-      if (shellCommand.includes('</dev/null')) {
-        return { exitCode: 0, stdout: '', stderr: '' };
+    if (command !== 'docker') {
+      result = { exitCode: 1, stdout: '', stderr: '' };
+    } else {
+      const subcommand = args[0];
+      if (subcommand === 'version') {
+        result =
+          options.dockerMissing === true
+            ? { exitCode: 1, stdout: '', stderr: '' }
+            : { exitCode: 0, stdout: '27.0.0', stderr: '' };
+      } else if (subcommand === 'image') {
+        result =
+          options.imageMissing === true
+            ? { exitCode: 1, stdout: '', stderr: '' }
+            : { exitCode: 0, stdout: '[]', stderr: '' };
+      } else if (subcommand === 'run') {
+        runCount += 1;
+        result = { exitCode: 0, stdout: `container-${String(runCount)}`, stderr: '' };
+      } else if (subcommand === 'exec') {
+        const shellCommand = args.at(-1) ?? '';
+        if (shellCommand.includes('</dev/null')) {
+          result = { exitCode: 0, stdout: '', stderr: '' };
+        } else {
+          const isNewRun = runCount === 2;
+          const status = isNewRun ? (options.newStatus ?? 200) : (options.oldStatus ?? 200);
+          const defaultBody = { id: 'cus_fixture', object: 'customer' };
+          const body = isNewRun
+            ? (options.newBody ?? defaultBody)
+            : (options.oldBody ?? defaultBody);
+          result = { exitCode: 0, stdout: httpResponse(status, body), stderr: '' };
+        }
+      } else if (subcommand === 'rm') {
+        result = { exitCode: 0, stdout: '', stderr: '' };
+      } else {
+        result = { exitCode: 1, stdout: '', stderr: '' };
       }
-      const isNewRun = runCount === 2;
-      const status = isNewRun ? (options.newStatus ?? 200) : (options.oldStatus ?? 200);
-      const defaultBody = { id: 'cus_fixture', object: 'customer' };
-      const body = isNewRun ? (options.newBody ?? defaultBody) : (options.oldBody ?? defaultBody);
-      return { exitCode: 0, stdout: httpResponse(status, body), stderr: '' };
     }
-    if (subcommand === 'rm') return { exitCode: 0, stdout: '', stderr: '' };
-    return { exitCode: 1, stdout: '', stderr: '' };
+
+    return Promise.resolve(result);
   };
   return { executor, calls };
 }

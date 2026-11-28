@@ -106,8 +106,8 @@ describe('RepoScanner', () => {
     expect(report.needsHuman[0]).toMatchObject({
       kind: 'endpoint_removed',
       resource: 'Customer',
-      reason: expect.stringContaining('review manually'),
     });
+    expect(report.needsHuman[0]?.reason).toContain('review manually');
     expect(
       report.unverifiedCallSiteCoverage.some((note) => note.includes('need human review')),
     ).toBe(true);

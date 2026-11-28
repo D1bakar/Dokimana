@@ -11,7 +11,7 @@ import { toPosixPath } from '../util/paths.js';
 const SEVERITIES: ChangeSeverity[] = ['high', 'medium', 'low'];
 
 function terminalText(value: string): string {
-  return [...value]
+  return Array.from(value)
     .map((character) => {
       const codePoint = character.codePointAt(0) ?? 0;
       return codePoint < 32 || (codePoint >= 127 && codePoint <= 159) ? ' ' : character;
@@ -42,10 +42,10 @@ export function renderTerminalReport(report: EvidenceReport): string {
     `Repository: ${terminalText(report.repository)}`,
     `Provider version: ${terminalText(report.providerVersion)}`,
     `Impact analysis: ${report.impactAnalysis}`,
-    `Changes: ${report.changes.length} (high ${counts.high}, medium ${counts.medium}, low ${counts.low})`,
-    `Affected call sites: ${report.findings.length}`,
-    `Needs human review: ${report.needsHuman.length}`,
-    `Unresolved sites: ${readUnresolved(report).length}`,
+    `Changes: ${String(report.changes.length)} (high ${String(counts.high)}, medium ${String(counts.medium)}, low ${String(counts.low)})`,
+    `Affected call sites: ${String(report.findings.length)}`,
+    `Needs human review: ${String(report.needsHuman.length)}`,
+    `Unresolved sites: ${String(readUnresolved(report).length)}`,
     'Structured changes:',
   ];
   if (report.changes.length === 0) lines.push('  None');
@@ -66,7 +66,7 @@ export function renderTerminalReport(report: EvidenceReport): string {
   }
   for (const item of readUnresolved(report)) {
     lines.push(
-      `  - [unresolved:${terminalText(item.kind)}] ${terminalText(item.file)}:${item.line}:${item.column}: ${terminalText(item.reason)}`,
+      `  - [unresolved:${terminalText(item.kind)}] ${terminalText(item.file)}:${String(item.line)}:${String(item.column)}: ${terminalText(item.reason)}`,
     );
   }
   for (const result of report.verification) {
@@ -120,14 +120,14 @@ export function renderMarkdownReport(report: EvidenceReport): string {
     '',
     '| Metric | Count |',
     '| --- | ---: |',
-    `| Structured changes | ${report.changes.length} |`,
-    `| High severity changes | ${counts.high} |`,
-    `| Medium severity changes | ${counts.medium} |`,
-    `| Low severity changes | ${counts.low} |`,
-    `| Affected call sites | ${report.findings.length} |`,
-    `| Needs human review | ${report.needsHuman.length} |`,
-    `| Unresolved sites | ${unresolved.length} |`,
-    `| Verification results | ${report.verification.length} |`,
+    `| Structured changes | ${String(report.changes.length)} |`,
+    `| High severity changes | ${String(counts.high)} |`,
+    `| Medium severity changes | ${String(counts.medium)} |`,
+    `| Low severity changes | ${String(counts.low)} |`,
+    `| Affected call sites | ${String(report.findings.length)} |`,
+    `| Needs human review | ${String(report.needsHuman.length)} |`,
+    `| Unresolved sites | ${String(unresolved.length)} |`,
+    `| Verification results | ${String(report.verification.length)} |`,
     '',
     '## By severity',
     '',
@@ -135,7 +135,7 @@ export function renderMarkdownReport(report: EvidenceReport): string {
 
   for (const severity of SEVERITIES) {
     const group = report.changes.filter((change) => severityForChange(change.kind) === severity);
-    lines.push(`### ${severity} (${group.length})`, '');
+    lines.push(`### ${severity} (${String(group.length)})`, '');
     if (group.length === 0) lines.push('_None._', '');
     else {
       for (const change of group) lines.push(`- ${inlineCode(changeLabel(change))}`);
@@ -148,7 +148,7 @@ export function renderMarkdownReport(report: EvidenceReport): string {
   else {
     for (const resource of sortedResources(report.changes)) {
       const group = report.changes.filter((change) => change.resource === resource);
-      lines.push(`### ${inlineCode(resource)} (${group.length})`, '');
+      lines.push(`### ${inlineCode(resource)} (${String(group.length)})`, '');
       for (const change of group) {
         const explanation = explainChange(change.kind);
         lines.push(
@@ -175,7 +175,7 @@ export function renderMarkdownReport(report: EvidenceReport): string {
   if (report.findings.length === 0) lines.push('_No impacted call sites found._');
   for (const finding of report.findings) {
     lines.push(
-      `- ${inlineCode(`${finding.callSite.file}:${finding.callSite.line}:${finding.callSite.column}`)} — ${markdownText(finding.reason)} (${finding.confidence}: ${markdownText(finding.confidenceReason)})`,
+      `- ${inlineCode(`${finding.callSite.file}:${String(finding.callSite.line)}:${String(finding.callSite.column)}`)} — ${markdownText(finding.reason)} (${finding.confidence}: ${markdownText(finding.confidenceReason)})`,
     );
   }
 
@@ -192,7 +192,7 @@ export function renderMarkdownReport(report: EvidenceReport): string {
   if (unresolved.length === 0) lines.push('_No unresolved source patterns recorded._');
   for (const item of unresolved) {
     lines.push(
-      `- ${inlineCode(`${item.file}:${item.line}:${item.column}`)} ${inlineCode(item.kind)} — ${markdownText(item.reason)} (${inlineCode(item.snippet)})`,
+      `- ${inlineCode(`${item.file}:${String(item.line)}:${String(item.column)}`)} ${inlineCode(item.kind)} — ${markdownText(item.reason)} (${inlineCode(item.snippet)})`,
     );
   }
 

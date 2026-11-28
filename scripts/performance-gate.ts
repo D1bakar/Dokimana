@@ -43,8 +43,8 @@ const result = spawnSync(
 
 if (result.error !== undefined) throw result.error;
 if (result.status !== 0) {
-  const detail = `${result.stdout ?? ''}${result.stderr ?? ''}`.trim();
-  throw new Error(`Benchmark failed with exit code ${result.status ?? 1}: ${detail}`);
+  const detail = `${result.stdout}${result.stderr}`.trim();
+  throw new Error(`Benchmark failed with exit code ${String(result.status)}: ${detail}`);
 }
 
 const measurementValue: unknown = JSON.parse(result.stdout.trim());
@@ -53,26 +53,34 @@ const measurement = measurementValue as unknown as BenchmarkMeasurement;
 
 const failures: string[] = [];
 if (measurement.iterations !== budget.iterations) {
-  failures.push(`iterations changed: expected ${budget.iterations}, got ${measurement.iterations}`);
+  failures.push(
+    `iterations changed: expected ${String(budget.iterations)}, got ${String(measurement.iterations)}`,
+  );
 }
 if (measurement.oldBytes !== budget.oldBytes) {
   failures.push(
-    `old fixture bytes changed: expected ${budget.oldBytes}, got ${measurement.oldBytes}`,
+    `old fixture bytes changed: expected ${String(budget.oldBytes)}, got ${String(measurement.oldBytes)}`,
   );
 }
 if (measurement.newBytes !== budget.newBytes) {
   failures.push(
-    `new fixture bytes changed: expected ${budget.newBytes}, got ${measurement.newBytes}`,
+    `new fixture bytes changed: expected ${String(budget.newBytes)}, got ${String(measurement.newBytes)}`,
   );
 }
 if (measurement.changes !== budget.changes) {
-  failures.push(`change count changed: expected ${budget.changes}, got ${measurement.changes}`);
+  failures.push(
+    `change count changed: expected ${String(budget.changes)}, got ${String(measurement.changes)}`,
+  );
 }
 if (measurement.totalMs > budget.maxTotalMs) {
-  failures.push(`totalMs ${measurement.totalMs} exceeds budget ${budget.maxTotalMs}`);
+  failures.push(
+    `totalMs ${String(measurement.totalMs)} exceeds budget ${String(budget.maxTotalMs)}`,
+  );
 }
 if (measurement.averageMs > budget.maxAverageMs) {
-  failures.push(`averageMs ${measurement.averageMs} exceeds budget ${budget.maxAverageMs}`);
+  failures.push(
+    `averageMs ${String(measurement.averageMs)} exceeds budget ${String(budget.maxAverageMs)}`,
+  );
 }
 
 console.log(

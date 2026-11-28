@@ -188,7 +188,8 @@ export function canonicalize(value: unknown): unknown {
 export function serializeValue(value: unknown): string {
   if (typeof value === 'string') return value;
   if (value === undefined) return 'undefined';
-  return JSON.stringify(canonicalize(value)) ?? String(value);
+  if (typeof value === 'symbol' || typeof value === 'function') return value.toString();
+  return JSON.stringify(canonicalize(value));
 }
 
 export function checksum(value: unknown): string {
@@ -201,7 +202,7 @@ function decodePointerToken(token: string): string {
   return token.replaceAll('~1', '/').replaceAll('~0', '~');
 }
 
-export function resolveJsonPointer(root: unknown, pointer: string): unknown | undefined {
+export function resolveJsonPointer(root: unknown, pointer: string): unknown {
   if (pointer === '' || pointer === '#') return root;
   if (!pointer.startsWith('#/')) return undefined;
 
@@ -229,7 +230,7 @@ export function resolveJsonPointer(root: unknown, pointer: string): unknown | un
   return current;
 }
 
-export function resolveOpenApiRef(root: unknown, reference: string): unknown | undefined {
+export function resolveOpenApiRef(root: unknown, reference: string): unknown {
   if (!reference.startsWith('#')) return undefined;
   return resolveJsonPointer(root, reference);
 }
@@ -567,7 +568,10 @@ function indexedOperations(
       const responses = new Map<string, Map<string, SchemaField>>();
       for (const status of Object.keys(operation.responses ?? {}).sort()) {
         const schema = jsonSchema(operation.responses?.[status], document);
-        responses.set(status, schema ? schemaFields(schema, document) : new Map());
+        responses.set(
+          status,
+          schema ? schemaFields(schema, document) : new Map<string, SchemaField>(),
+        );
       }
       const requestSchema = jsonSchema(operation.requestBody, document);
       operations.push({
@@ -578,7 +582,9 @@ function indexedOperations(
         source,
         parameters: parameterMap([pathItem, operation], document),
         hasRequestBody: operation.requestBody !== undefined,
-        requestBodyFields: requestSchema ? schemaFields(requestSchema, document) : new Map(),
+        requestBodyFields: requestSchema
+          ? schemaFields(requestSchema, document)
+          : new Map<string, SchemaField>(),
         responses,
       });
     }

@@ -270,16 +270,18 @@ describe('ChangeDetector', () => {
 
 describe('assertOpenApiInput', () => {
   it('rejects an empty JSON object instead of treating it as an empty contract', () => {
-    expect(() => assertOpenApiInput({}, 'old.json')).toThrow(/old.json must include/);
+    expect(() => {
+      assertOpenApiInput({}, 'old.json');
+    }).toThrow(/old.json must include/);
   });
 
   it('accepts the shape used by the synthetic fixtures', () => {
-    expect(() =>
+    expect(() => {
       assertOpenApiInput(
         { openapi: '3.1.0', info: { version: 'fixture' }, components: { schemas: {} } },
         'old.json',
-      ),
-    ).not.toThrow();
+      );
+    }).not.toThrow();
   });
 });
 

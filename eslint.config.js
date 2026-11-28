@@ -13,6 +13,7 @@ export default [
       'reports/**',
       'site/**',
       'fixtures/**',
+      'src/scanner/fixtures/**',
       'benchmarks/projects/**',
     ],
   },
@@ -40,7 +41,7 @@ export default [
     },
     plugins: { '@typescript-eslint': tseslint },
     rules: {
-      ...tseslint.configs.recommended.rules,
+      ...tseslint.configs['strict-type-checked'].rules,
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',
     },

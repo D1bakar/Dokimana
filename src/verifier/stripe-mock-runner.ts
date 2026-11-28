@@ -91,16 +91,20 @@ export function createCommandExecutor(): CommandExecutor {
           finish(124);
         }, options?.timeoutMs ?? 30_000);
 
-        child.stdout?.setEncoding('utf8');
-        child.stderr?.setEncoding('utf8');
-        child.stdout?.on('data', (chunk: string) => {
+        child.stdout.setEncoding('utf8');
+        child.stderr.setEncoding('utf8');
+        child.stdout.on('data', (chunk: string) => {
           stdout += chunk;
         });
-        child.stderr?.on('data', (chunk: string) => {
+        child.stderr.on('data', (chunk: string) => {
           stderr += chunk;
         });
-        child.on('error', () => finish(1));
-        child.on('close', (code) => finish(typeof code === 'number' ? code : 1));
+        child.on('error', () => {
+          finish(1);
+        });
+        child.on('close', (code) => {
+          finish(typeof code === 'number' ? code : 1);
+        });
       } catch {
         finish(1);
       }
@@ -141,7 +145,7 @@ export class StripeMockVerifier {
       const docker = await this.safeExec('docker', ['version', '--format', '{{.Server.Version}}']);
       if (docker.exitCode !== 0 || docker.stdout.trim() === '') {
         throw new RuntimeFailure(
-          `Docker is unavailable or its daemon is unreachable (docker version --format {{.Server.Version}} exited ${docker.exitCode}).`,
+          `Docker is unavailable or its daemon is unreachable (docker version --format {{.Server.Version}} exited ${String(docker.exitCode)}).`,
           DOCKER_FIX,
         );
       }
@@ -246,7 +250,7 @@ export class StripeMockVerifier {
     startedContainers: string[],
   ): Promise<StripeMockRequestObservation[]> {
     containerSequence += 1;
-    const name = `dokimana-stripe-mock-${process.pid}-${containerSequence}`;
+    const name = `dokimana-stripe-mock-${String(process.pid)}-${String(containerSequence)}`;
     const runArgs = [
       'run',
       '--detach',
@@ -318,7 +322,10 @@ export class StripeMockVerifier {
         );
       }
       const observation = parseObservation(response.stdout);
-      observations.push({ ...observation, name: requests[index]?.name ?? `request-${index + 1}` });
+      observations.push({
+        ...observation,
+        name: requests[index]?.name ?? `request-${String(index + 1)}`,
+      });
     }
     return observations;
   }
@@ -393,15 +400,15 @@ function parseRequests(input: Record<string, unknown>): StripeMockRequest[] {
   }
   return raw.map((entry, index) => {
     if (!isRecord(entry)) {
-      throw new Error(`scenario.input.requests[${index}] must be an object.`);
+      throw new Error(`scenario.input.requests[${String(index)}] must be an object.`);
     }
     const { name, method, path, headers, body } = entry;
     if (typeof name !== 'string' || name.trim() === '') {
-      throw new Error(`scenario.input.requests[${index}].name must be a non-empty string.`);
+      throw new Error(`scenario.input.requests[${String(index)}].name must be a non-empty string.`);
     }
     if (typeof method !== 'string' || !ALLOWED_METHODS.has(method.toUpperCase())) {
       throw new Error(
-        `scenario.input.requests[${index}].method must be one of ${[...ALLOWED_METHODS].join(', ')}.`,
+        `scenario.input.requests[${String(index)}].method must be one of ${[...ALLOWED_METHODS].join(', ')}.`,
       );
     }
     if (
@@ -411,14 +418,14 @@ function parseRequests(input: Record<string, unknown>): StripeMockRequest[] {
       path.includes('..')
     ) {
       throw new Error(
-        `scenario.input.requests[${index}].path must be an absolute path without whitespace, line breaks, or '..'.`,
+        `scenario.input.requests[${String(index)}].path must be an absolute path without whitespace, line breaks, or '..'.`,
       );
     }
     let safeHeaders: Record<string, string> | undefined;
     if (headers !== undefined) {
       if (!isRecord(headers) || Object.values(headers).some((value) => typeof value !== 'string')) {
         throw new Error(
-          `scenario.input.requests[${index}].headers must be an object of string values.`,
+          `scenario.input.requests[${String(index)}].headers must be an object of string values.`,
         );
       }
       safeHeaders = {};
@@ -435,11 +442,13 @@ function parseRequests(input: Record<string, unknown>): StripeMockRequest[] {
         }
         serializedBody = result;
       } catch {
-        throw new Error(`scenario.input.requests[${index}].body must be JSON-serializable.`);
+        throw new Error(
+          `scenario.input.requests[${String(index)}].body must be JSON-serializable.`,
+        );
       }
       if (looksLikeSecret(serializedBody)) {
         throw new Error(
-          `scenario.input.requests[${index}].body contains a forbidden secret value and was refused.`,
+          `scenario.input.requests[${String(index)}].body contains a forbidden secret value and was refused.`,
         );
       }
     }
@@ -468,9 +477,9 @@ function serializeHttpRequest(request: StripeMockRequest): string {
   }
   let bodyText = '';
   if (request.body !== undefined) {
-    bodyText = JSON.stringify(request.body) ?? '';
+    bodyText = JSON.stringify(request.body);
     headers.push('Content-Type: application/json');
-    headers.push(`Content-Length: ${Buffer.byteLength(bodyText, 'utf8')}`);
+    headers.push(`Content-Length: ${String(Buffer.byteLength(bodyText, 'utf8'))}`);
   }
   return `${[`${request.method} ${request.path} HTTP/1.1`, ...headers].join('\r\n')}\r\n\r\n${bodyText}`;
 }
@@ -573,10 +582,10 @@ function describeShape(value: unknown, path: string, depth: number): string[] {
       return;
     }
     if (Array.isArray(current)) {
-      entries.push(`${currentPath}:array[${current.length}]`);
+      entries.push(`${currentPath}:array[${String(current.length)}]`);
       if (currentDepth < MAX_SHAPE_DEPTH) {
         for (const [itemIndex, item] of current.slice(0, 8).entries()) {
-          visit(item, `${currentPath}[${itemIndex}]`, currentDepth + 1);
+          visit(item, `${currentPath}[${String(itemIndex)}]`, currentDepth + 1);
         }
       }
       return;
@@ -607,12 +616,14 @@ function collectDifferences(
     const oldObservation = oldObservations[index];
     const newObservation = newObservations[index];
     if (request === undefined || oldObservation === undefined || newObservation === undefined) {
-      differences.push(`request ${index + 1} missing from one stripe-mock run`);
+      differences.push(`request ${String(index + 1)} missing from one stripe-mock run`);
       continue;
     }
     const label = `${request.method} ${request.path}`;
     if (oldObservation.status !== newObservation.status) {
-      differences.push(`${label} status ${oldObservation.status} -> ${newObservation.status}`);
+      differences.push(
+        `${label} status ${String(oldObservation.status)} -> ${String(newObservation.status)}`,
+      );
     }
     if (!isDeepStrictEqual(oldObservation.validationErrors, newObservation.validationErrors)) {
       differences.push(

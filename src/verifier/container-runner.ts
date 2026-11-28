@@ -34,11 +34,11 @@ export interface ContainerExecutionPort {
 }
 
 export class DockerNotConfiguredRunner implements ContainerExecutionPort {
-  async execute(): Promise<ContainerExecutionResult> {
-    return {
+  execute(): Promise<ContainerExecutionResult> {
+    return Promise.resolve({
       status: 'could_not_run',
       reason: 'Docker isolation runner is not configured. Execution was not attempted.',
       isolation: { isolated: false, network: 'not_run', secrets: 'none' },
-    };
+    });
   }
 }

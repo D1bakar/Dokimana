@@ -1,5 +1,7 @@
+import * as guards from './node-guards.js';
+import type { NodeLike } from './node-guards.js';
 import { dirname, resolve } from 'node:path';
-import { Node, SyntaxKind, type ExportSpecifier, type Project, type SourceFile } from 'ts-morph';
+import { SyntaxKind, type ExportSpecifier, type Project, type SourceFile } from 'ts-morph';
 
 export type StripeSymbolKind = 'client' | 'resource' | 'event';
 
@@ -34,16 +36,16 @@ function normalizePath(path: string): string {
   return path.replaceAll('\\', '/').toLowerCase();
 }
 
-function identifierName(node: Node): string | undefined {
-  return Node.isIdentifier(node) ? node.getText() : undefined;
+function identifierName(node: NodeLike): string | undefined {
+  return guards.isIdentifier(node) ? node.getText() : undefined;
 }
 
-function declaredType(node: Node): string {
+function declaredType(node: NodeLike): string {
   const parts: string[] = [];
   if (
-    Node.isVariableDeclaration(node) ||
-    Node.isParameterDeclaration(node) ||
-    Node.isPropertyDeclaration(node)
+    guards.isVariableDeclaration(node) ||
+    guards.isParameterDeclaration(node) ||
+    guards.isPropertyDeclaration(node)
   ) {
     const typeNode = node.getTypeNode();
     if (typeNode) parts.push(typeNode.getText());
@@ -52,7 +54,7 @@ function declaredType(node: Node): string {
     parts.push(comment.getText());
   }
   try {
-    parts.push(node.getType().getText(node));
+    parts.push(node.getType().getText());
   } catch {
     // A type checker failure is not fatal; textual annotation evidence still applies.
   }
@@ -70,15 +72,15 @@ function classifyType(text: string, aliases: ReadonlySet<string>): StripeSymbol 
   return undefined;
 }
 
-function unwrap(node: Node): Node {
+function unwrap(node: NodeLike): NodeLike {
   let current = node;
   for (;;) {
     if (
-      Node.isParenthesizedExpression(current) ||
-      Node.isAsExpression(current) ||
-      Node.isNonNullExpression(current) ||
-      Node.isSatisfiesExpression(current) ||
-      Node.isAwaitExpression(current)
+      guards.isParenthesizedExpression(current) ||
+      guards.isAsExpression(current) ||
+      guards.isNonNullExpression(current) ||
+      guards.isSatisfiesExpression(current) ||
+      guards.isAwaitExpression(current)
     ) {
       current = current.getExpression();
       continue;
@@ -87,34 +89,34 @@ function unwrap(node: Node): Node {
   }
 }
 
-function isRequireStripe(node: Node): boolean {
-  if (!Node.isCallExpression(node)) return false;
+function isRequireStripe(node: NodeLike): boolean {
+  if (!guards.isCallExpression(node)) return false;
   const expression = node.getExpression();
-  if (!Node.isIdentifier(expression) || expression.getText() !== 'require') return false;
+  if (!guards.isIdentifier(expression) || expression.getText() !== 'require') return false;
   const [argument] = node.getArguments();
   return (
     argument !== undefined &&
-    Node.isStringLiteral(argument) &&
+    guards.isStringLiteral(argument) &&
     argument.getLiteralValue() === 'stripe'
   );
 }
 
-function isStripeConstructor(node: Node, constructorNames: ReadonlySet<string>): boolean {
+function isStripeConstructor(node: NodeLike, constructorNames: ReadonlySet<string>): boolean {
   const value = unwrap(node);
-  if (!Node.isNewExpression(value)) return false;
+  if (!guards.isNewExpression(value)) return false;
   const text = value.getExpression().getText();
   return [...constructorNames].some((name) => text === name || text.startsWith(`${name}.`));
 }
 
-function isConstructEventCall(node: Node): boolean {
+function isConstructEventCall(node: NodeLike): boolean {
   const value = unwrap(node);
   return (
-    Node.isCallExpression(value) && value.getExpression().getText().endsWith('.constructEvent')
+    guards.isCallExpression(value) && value.getExpression().getText().endsWith('.constructEvent')
   );
 }
 
-function importBindings(declaration: Node): Array<{ imported: string; local: string }> {
-  if (!Node.isImportDeclaration(declaration)) return [];
+function importBindings(declaration: NodeLike): Array<{ imported: string; local: string }> {
+  if (!guards.isImportDeclaration(declaration)) return [];
   const bindings: Array<{ imported: string; local: string }> = [];
   const defaultImport = declaration.getDefaultImport();
   if (defaultImport) bindings.push({ imported: 'default', local: defaultImport.getText() });

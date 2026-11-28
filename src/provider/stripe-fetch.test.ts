@@ -22,12 +22,14 @@ function spec(reportedVersion = version) {
 }
 
 function mockFetch(body: unknown): typeof fetch {
-  return async (input) => {
-    expect(String(input)).toBe(stripeSpecUrl(commit, 'latest'));
-    return new Response(JSON.stringify(body), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    });
+  return (input) => {
+    expect(input).toBe(stripeSpecUrl(commit, 'latest'));
+    return Promise.resolve(
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
   };
 }
 
@@ -70,6 +72,8 @@ describe('fetchStripeSpec', () => {
   });
 
   it('requires a full commit SHA', () => {
-    expect(() => validateCommit('master')).toThrow(/40-character/);
+    expect(() => {
+      validateCommit('master');
+    }).toThrow(/40-character/);
   });
 });

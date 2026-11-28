@@ -219,7 +219,7 @@ function assertStringArray(
   }
   for (const [index, entry] of value.entries()) {
     if (typeof entry !== 'string' || entry.trim().length === 0) {
-      throw new Error(`${context}: ${field}[${index}] must be a non-empty string.`);
+      throw new Error(`${context}: ${field}[${String(index)}] must be a non-empty string.`);
     }
   }
 }

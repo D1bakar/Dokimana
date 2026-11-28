@@ -19,7 +19,7 @@ function canRunIsolatedStripeMock(): boolean {
       shell: process.platform === 'win32',
       timeout: 3_000,
     });
-    if (version.error !== undefined || version.status !== 0 || !version.stdout?.trim()) {
+    if (version.error !== undefined || version.status !== 0 || !version.stdout.trim()) {
       return false;
     }
     const image = spawnSync(dockerCommand, ['image', 'inspect', STRIPE_MOCK_IMAGE], {

@@ -13,20 +13,87 @@ import {
 import { renderHtml } from './reporter/html.js';
 import { renderSarif } from './reporter/sarif.js';
 import type { ChangeSeverity } from './reporter/explanations.js';
-import { assertSafeTestModeKeys, validateStripeKey } from './verifier/key-safety.js';
-import { assertOpenApiInput } from './diff/structured-diff.js';
+import { checkSafeTestModeKeys, validateStripeKey } from './verifier/key-safety.js';
+import { assertOpenApiInput, type OpenApiInput } from './diff/structured-diff.js';
 import { fetchStripeSpec, type StripeSpecChannel } from './provider/stripe-fetch.js';
 import { createConfigFile } from './config/init.js';
 import { assertMappingsFile, suggestChanges, type MappingsFile } from './suggest/suggest.js';
 import { StripeMockVerifier } from './verifier/stripe-mock-runner.js';
 import type { EvidenceReport, ImpactReport, Scenario } from './domain/types.js';
+import { err, ok, type Result } from './domain/result.js';
 import { DockerNotConfiguredRunner } from './verifier/container-runner.js';
 import { Verifier } from './verifier/verifier.js';
 
 type ReportFormat = 'json' | 'markdown' | 'sarif' | 'html';
 type FailOn = ChangeSeverity | 'none';
+type FailureCode = 'invalid_argument' | 'invalid_input' | 'unsafe_key';
+
+interface CliFailure {
+  readonly code: FailureCode;
+  readonly message: string;
+  readonly exitCode: number;
+}
+
+interface ScanOptions {
+  repo: string;
+  old: string;
+  new: string;
+  oldVersion: string;
+  newVersion: string;
+  json?: string;
+  markdown?: string;
+  sarif?: string;
+  html?: string;
+  format: string;
+  failOnChanges: Result<boolean, CliFailure>;
+  failOn: string;
+}
+
+interface VerifyOptions {
+  repo: string;
+  scenario?: string;
+  oldSpec?: string;
+  newSpec?: string;
+  timeout: Result<number, CliFailure>;
+  json?: string;
+}
+
+interface ReportOptions {
+  repo: string;
+  impact: string;
+  output: string;
+  providerVersion: string;
+  sarif?: string;
+  html?: string;
+  format: string;
+  failOn: string;
+}
+
+interface SuggestOptions {
+  repo: string;
+  impact: string;
+  mappings: string;
+  out: string;
+  dryRun: boolean;
+}
+
+interface InitOptions {
+  path: string;
+  repo?: string;
+  force: boolean;
+}
+
+interface FetchSpecOptions {
+  version: string;
+  commit: string;
+  out: string;
+  channel: string;
+}
 
 const program = new Command();
+const noFailOnChanges: Result<boolean, CliFailure> = ok(false);
+const defaultTimeout: Result<number, CliFailure> = ok(30);
+
 program
   .name('dokimana')
   .description('Stripe breaking-change evidence for pull requests')
@@ -52,31 +119,63 @@ program
     '--fail-on-changes <boolean>',
     'Exit with code 1 when structural changes are found',
     parseBoolean,
-    false,
+    noFailOnChanges,
   )
   .option(
     '--fail-on <level>',
     'Exit with code 1 when a change or finding reaches this level: high, medium, low, or none',
     'none',
   )
-  .action(async (options) => {
-    assertSafeTestModeKeys(process.env);
+  .action(async (options: ScanOptions) => {
+    const keyFailure = unsafeKeyFailure();
+    if (keyFailure) {
+      reportFailure(keyFailure);
+      return;
+    }
     const format = parseFormat(options.format);
+    if (!format.ok) {
+      reportFailure(format.error);
+      return;
+    }
     const failOn = parseFailOn(options.failOn);
-    const oldDocument: unknown = JSON.parse(await readFile(resolve(options.old), 'utf8'));
-    const newDocument: unknown = JSON.parse(await readFile(resolve(options.new), 'utf8'));
-    assertOpenApiInput(oldDocument, options.old);
-    assertOpenApiInput(newDocument, options.new);
+    if (!failOn.ok) {
+      reportFailure(failOn.error);
+      return;
+    }
+    if (!options.failOnChanges.ok) {
+      reportFailure(options.failOnChanges.error);
+      return;
+    }
+    const oldJson = await readJsonFile(resolve(options.old));
+    if (!oldJson.ok) {
+      reportFailure(oldJson.error);
+      return;
+    }
+    const newJson = await readJsonFile(resolve(options.new));
+    if (!newJson.ok) {
+      reportFailure(newJson.error);
+      return;
+    }
+    const oldInput = validateOpenApiInput(oldJson.value, options.old);
+    if (!oldInput.ok) {
+      reportFailure(oldInput.error);
+      return;
+    }
+    const newInput = validateOpenApiInput(newJson.value, options.new);
+    if (!newInput.ok) {
+      reportFailure(newInput.error);
+      return;
+    }
     const changes = new ChangeDetector().diff({
-      oldDocument,
-      newDocument,
+      oldDocument: oldInput.value,
+      newDocument: newInput.value,
       oldVersion: options.oldVersion,
       newVersion: options.newVersion,
     });
     const impact = await new RepoScanner().scan(resolve(options.repo), changes);
     const evidence = buildEvidenceReport({
       repository: resolve(options.repo),
-      providerVersion: newDocument.info?.version ?? options.newVersion,
+      providerVersion: newInput.value.info?.version ?? options.newVersion,
       impact,
       verification: [],
     });
@@ -88,8 +187,8 @@ program
     if (options.sarif) await writeFile(resolve(options.sarif), renderSarif(evidence));
     if (options.html) await writeFile(resolve(options.html), renderHtml(evidence));
 
-    console.log(formatReport(evidence, format));
-    applyFailurePolicy(evidence, format, options.failOnChanges, failOn);
+    console.log(formatReport(evidence, format.value));
+    applyFailurePolicy(evidence, format.value, options.failOnChanges.value, failOn.value);
   });
 
 program
@@ -103,25 +202,45 @@ program
     '--timeout <seconds>',
     'Timeout for each isolated container run',
     parsePositiveInteger,
-    30,
+    defaultTimeout,
   )
   .option('--json <file>', 'Write the verification result as JSON')
-  .action(async (options) => {
-    assertSafeTestModeKeys(process.env);
+  .action(async (options: VerifyOptions) => {
+    const keyFailure = unsafeKeyFailure();
+    if (keyFailure) {
+      reportFailure(keyFailure);
+      return;
+    }
     if (!options.scenario) {
-      throw new Error('Provide --scenario to verify; use doctor for a key-safety check.');
+      reportFailure(
+        invalidArgument('Provide --scenario to verify; use doctor for a key-safety check.'),
+      );
+      return;
+    }
+    if (!options.timeout.ok) {
+      reportFailure(options.timeout.error);
+      return;
+    }
+    const scenarioJson = await readJsonFile(resolve(options.scenario));
+    if (!scenarioJson.ok) {
+      reportFailure(scenarioJson.error);
+      return;
+    }
+    const scenario = parseScenario(scenarioJson.value);
+    if (!scenario.ok) {
+      reportFailure(scenario.error);
+      return;
     }
 
-    const scenario = parseScenario(JSON.parse(await readFile(resolve(options.scenario), 'utf8')));
     const result =
       options.oldSpec && options.newSpec
         ? await new StripeMockVerifier({
             oldSpecPath: resolve(options.oldSpec),
             newSpecPath: resolve(options.newSpec),
-            timeoutSeconds: options.timeout,
-          }).verify(scenario, process.env)
+            timeoutSeconds: options.timeout.value,
+          }).verify(scenario.value, process.env)
         : await new Verifier(new DockerNotConfiguredRunner(), resolve(options.repo)).verify(
-            scenario,
+            scenario.value,
             process.env,
           );
     if (options.json) await writeFile(resolve(options.json), JSON.stringify(result, null, 2));
@@ -154,20 +273,38 @@ program
     'markdown',
   )
   .option('--fail-on <level>', 'Exit with code 1 at this level: high, medium, low, or none', 'none')
-  .action(async (options) => {
-    const impact: unknown = JSON.parse(await readFile(resolve(options.impact), 'utf8'));
-    assertImpactReport(impact, options.impact);
+  .action(async (options: ReportOptions) => {
+    const format = parseFormat(options.format);
+    if (!format.ok) {
+      reportFailure(format.error);
+      return;
+    }
+    const failOn = parseFailOn(options.failOn);
+    if (!failOn.ok) {
+      reportFailure(failOn.error);
+      return;
+    }
+    const impactJson = await readJsonFile(resolve(options.impact));
+    if (!impactJson.ok) {
+      reportFailure(impactJson.error);
+      return;
+    }
+    const impact = validateImpactReport(impactJson.value, options.impact);
+    if (!impact.ok) {
+      reportFailure(impact.error);
+      return;
+    }
     const evidence = buildEvidenceReport({
       repository: resolve(options.repo),
       providerVersion: options.providerVersion,
-      impact,
+      impact: impact.value,
       verification: [],
     });
     await writeFile(resolve(options.output), renderMarkdownReport(evidence));
     if (options.sarif) await writeFile(resolve(options.sarif), renderSarif(evidence));
     if (options.html) await writeFile(resolve(options.html), renderHtml(evidence));
-    console.log(formatReport(evidence, parseFormat(options.format)));
-    applyFailurePolicy(evidence, parseFormat(options.format), false, parseFailOn(options.failOn));
+    console.log(formatReport(evidence, format.value));
+    applyFailurePolicy(evidence, format.value, false, failOn.value);
   });
 
 program
@@ -178,15 +315,31 @@ program
   .requiredOption('-m, --mappings <file>', 'JSON object of field-path mappings')
   .option('-o, --out <file>', 'Patch output file', 'dokimana-suggested.patch')
   .option('--dry-run', 'Print the patch without writing a file', false)
-  .action(async (options) => {
-    const impact: unknown = JSON.parse(await readFile(resolve(options.impact), 'utf8'));
-    assertImpactReport(impact, options.impact);
-    const mappings: unknown = JSON.parse(await readFile(resolve(options.mappings), 'utf8'));
-    assertMappingsFile(mappings, options.mappings);
+  .action(async (options: SuggestOptions) => {
+    const impactJson = await readJsonFile(resolve(options.impact));
+    if (!impactJson.ok) {
+      reportFailure(impactJson.error);
+      return;
+    }
+    const impact = validateImpactReport(impactJson.value, options.impact);
+    if (!impact.ok) {
+      reportFailure(impact.error);
+      return;
+    }
+    const mappingsJson = await readJsonFile(resolve(options.mappings));
+    if (!mappingsJson.ok) {
+      reportFailure(mappingsJson.error);
+      return;
+    }
+    const mappings = validateMappingsFile(mappingsJson.value, options.mappings);
+    if (!mappings.ok) {
+      reportFailure(mappings.error);
+      return;
+    }
     const result = suggestChanges({
       root: resolve(options.repo),
-      impact: impact as ImpactReport,
-      mappings: mappings as MappingsFile,
+      impact: impact.value,
+      mappings: mappings.value,
     });
     if (!options.dryRun) {
       await writeFile(resolve(options.out), result.patch, 'utf8');
@@ -214,7 +367,7 @@ program
   .option('--path <file>', 'Config output path', 'dokimana.json')
   .option('--repo <path>', 'Repository root recorded in the config')
   .option('--force', 'Overwrite an existing config file', false)
-  .action(async (options) => {
+  .action(async (options: InitOptions) => {
     const result = await createConfigFile({
       path: resolve(options.path),
       ...(options.repo === undefined ? {} : { repo: options.repo }),
@@ -234,16 +387,25 @@ program
   .requiredOption('--commit <sha>', 'Full 40-character stripe/openapi commit SHA')
   .requiredOption('--out <file>', 'Destination JSON file')
   .option('--channel <channel>', 'Spec channel: latest, preview, or openapi', 'latest')
-  .action(async (options) => {
-    assertSafeTestModeKeys(process.env);
+  .action(async (options: FetchSpecOptions) => {
+    const keyFailure = unsafeKeyFailure();
+    if (keyFailure) {
+      reportFailure(keyFailure);
+      return;
+    }
+    const channel = parseChannel(options.channel);
+    if (!channel.ok) {
+      reportFailure(channel.error);
+      return;
+    }
     const result = await fetchStripeSpec({
       version: options.version,
       commit: options.commit,
       out: options.out,
-      channel: parseChannel(options.channel),
+      channel: channel.value,
     });
     console.log(
-      `Wrote ${result.outputPath} (${result.bytes} bytes, sha256 ${result.sha256}, commit ${result.commit}).`,
+      `Wrote ${result.outputPath} (${String(result.bytes)} bytes, sha256 ${result.sha256}, commit ${result.commit}).`,
     );
     console.log(`Checksum written to ${result.checksumPath}.`);
   });
@@ -251,8 +413,12 @@ program
 program
   .command('doctor')
   .description('Check local environment and Stripe key safety')
-  .action(() => {
-    assertSafeTestModeKeys(process.env);
+  .action((): void => {
+    const keyFailure = unsafeKeyFailure();
+    if (keyFailure) {
+      reportFailure(keyFailure);
+      return;
+    }
     const key = process.env.STRIPE_SECRET_KEY;
     const result = validateStripeKey(key);
     if (!result.safe) {
@@ -264,8 +430,8 @@ program
     console.log('Live Stripe access: blocked');
   });
 
-program.parseAsync(process.argv).catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error);
+void program.parseAsync(process.argv).catch((error: unknown) => {
+  console.error(describeError(error));
   process.exitCode = 1;
 });
 
@@ -276,7 +442,7 @@ function formatReport(report: EvidenceReport, format: ReportFormat): string {
   const counts = report.changes.length;
   const findings = report.findings.length;
   return [
-    `Found ${counts} structured changes and ${findings} impact findings.`,
+    `Found ${String(counts)} structured changes and ${String(findings)} impact findings.`,
     renderTerminalReport(report),
   ].join('\n');
 }
@@ -289,7 +455,7 @@ function applyFailurePolicy(
 ): void {
   const reasons: string[] = [];
   if (failOnChanges && report.changes.length > 0) {
-    reasons.push(`${report.changes.length} structural change(s) were found`);
+    reasons.push(`${String(report.changes.length)} structural change(s) were found`);
   }
   if (failOn !== 'none' && reachesThreshold(report, failOn)) {
     reasons.push(`a change or finding reached the ${failOn} level`);
@@ -317,40 +483,112 @@ function reachesThreshold(report: EvidenceReport, failOn: Exclude<FailOn, 'none'
   );
 }
 
-function parseBoolean(value: string): boolean {
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  throw new Error(`Expected "true" or "false", received "${value}".`);
+function invalidArgument(message: string): CliFailure {
+  return { code: 'invalid_argument', message, exitCode: 1 };
 }
 
-function parsePositiveInteger(value: string): number {
+function invalidInputFromError(error: unknown): CliFailure {
+  return { code: 'invalid_input', message: describeError(error), exitCode: 1 };
+}
+
+function unsafeKeyFailure(): CliFailure | undefined {
+  const result = checkSafeTestModeKeys(process.env);
+  return result.safe ? undefined : { code: 'unsafe_key', message: result.reason, exitCode: 1 };
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function reportFailure(failure: CliFailure): void {
+  console.error(failure.message);
+  process.exitCode = failure.exitCode;
+}
+
+async function readJsonFile(path: string): Promise<Result<unknown, CliFailure>> {
+  try {
+    const text = await readFile(path, 'utf8');
+    return ok(JSON.parse(text) as unknown);
+  } catch (error) {
+    return err({
+      code: 'invalid_input',
+      message: `${path}: ${describeError(error)}`,
+      exitCode: 1,
+    });
+  }
+}
+
+function validateOpenApiInput(value: unknown, label: string): Result<OpenApiInput, CliFailure> {
+  try {
+    assertOpenApiInput(value, label);
+    return ok(value);
+  } catch (error) {
+    return err(invalidInputFromError(error));
+  }
+}
+
+function validateImpactReport(value: unknown, label: string): Result<ImpactReport, CliFailure> {
+  try {
+    assertImpactReport(value, label);
+    return ok(value);
+  } catch (error) {
+    return err(invalidInputFromError(error));
+  }
+}
+
+function validateMappingsFile(value: unknown, label: string): Result<MappingsFile, CliFailure> {
+  try {
+    assertMappingsFile(value, label);
+    return ok(value);
+  } catch (error) {
+    return err(invalidInputFromError(error));
+  }
+}
+
+function parseBoolean(value: string): Result<boolean, CliFailure> {
+  if (value === 'true') return ok(true);
+  if (value === 'false') return ok(false);
+  return err(invalidArgument(`Expected "true" or "false", received "${value}".`));
+}
+
+function parsePositiveInteger(value: string): Result<number, CliFailure> {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(`Expected a positive integer, received "${value}".`);
+    return err(invalidArgument(`Expected a positive integer, received "${value}".`));
   }
-  return parsed;
+  return ok(parsed);
 }
 
-function parseFormat(value: string): ReportFormat {
+function parseFormat(value: string): Result<ReportFormat, CliFailure> {
   if (value === 'json' || value === 'markdown' || value === 'sarif' || value === 'html') {
-    return value;
+    return ok(value);
   }
-  throw new Error(`Expected "json", "markdown", "sarif", or "html", received "${value}".`);
+  return err(
+    invalidArgument(`Expected "json", "markdown", "sarif", or "html", received "${value}".`),
+  );
 }
 
-function parseFailOn(value: string): FailOn {
+function parseFailOn(value: string): Result<FailOn, CliFailure> {
   if (value === 'none' || value === 'high' || value === 'medium' || value === 'low') {
-    return value;
+    return ok(value);
   }
-  throw new Error(`Expected "high", "medium", "low", or "none", received "${value}".`);
+  return err(invalidArgument(`Expected "high", "medium", "low", or "none", received "${value}".`));
 }
 
-function parseChannel(value: string): StripeSpecChannel {
-  if (value === 'latest' || value === 'preview' || value === 'openapi') return value;
-  throw new Error(`Expected "latest", "preview", or "openapi", received "${value}".`);
+function parseChannel(value: string): Result<StripeSpecChannel, CliFailure> {
+  if (value === 'latest' || value === 'preview' || value === 'openapi') return ok(value);
+  return err(invalidArgument(`Expected "latest", "preview", or "openapi", received "${value}".`));
 }
 
-function parseScenario(value: unknown): Scenario {
+function parseScenario(value: unknown): Result<Scenario, CliFailure> {
+  try {
+    return ok(readScenario(value));
+  } catch (error) {
+    return err(invalidInputFromError(error));
+  }
+}
+
+function readScenario(value: unknown): Scenario {
   if (!isRecord(value)) throw new Error('Scenario must be a JSON object.');
   const id = readScenarioString(value, 'id');
   const name = readScenarioString(value, 'name');

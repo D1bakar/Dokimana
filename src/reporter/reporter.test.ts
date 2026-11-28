@@ -199,7 +199,9 @@ describe('renderTerminalReport', () => {
 
 describe('assertImpactReport', () => {
   it('rejects a JSON object that is not an impact report', () => {
-    expect(() => assertImpactReport({}, 'fixture-impact.json')).toThrow(/must include/);
+    expect(() => {
+      assertImpactReport({}, 'fixture-impact.json');
+    }).toThrow(/must include/);
   });
 
   it('normalizes older reports without a needsHuman array', () => {

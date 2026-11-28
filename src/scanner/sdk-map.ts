@@ -57,7 +57,7 @@ function label(method: SdkOperation['method'], path: string): string {
 export function mapSdkOperation(chain: string[]): SdkOperation | undefined {
   const parts = chain.filter((part) => part.length > 0);
   if (parts.length < 2) return undefined;
-  const key = `${parts[0]}.${parts[1]}`;
+  const key = `${String(parts[0])}.${String(parts[1])}`;
   const known = knownOperations.get(key);
   if (known) return { method: known[0], path: known[1], label: label(known[0], known[1]) };
   return undefined;

@@ -141,7 +141,7 @@ function parameterList(value: JsonObject): JsonObject[] {
 }
 
 function removeField(value: JsonObject, key: string): void {
-  delete value[key];
+  Reflect.deleteProperty(value, key);
 }
 
 function exampleResponse(): JsonObject {
@@ -240,7 +240,9 @@ export const CORPUS: readonly CorpusCase[] = [
     label: 'schema field removed',
     assessment: 'partial',
     note: 'Triage pending',
-    mutate: (document) => removeField(properties(schema(document, 'Example')), 'status'),
+    mutate: (document) => {
+      removeField(properties(schema(document, 'Example')), 'status');
+    },
   },
   {
     id: 'DOKC-002',
@@ -704,7 +706,7 @@ function parseArguments(argv: readonly string[]): { binary: string } {
       index += 1;
       continue;
     }
-    throw new Error(`Unknown argument: ${argv[index]}`);
+    throw new Error(`Unknown argument: ${String(argv[index])}`);
   }
   return { binary };
 }
@@ -783,7 +785,7 @@ async function run(): Promise<void> {
   const triagedResults = results.filter((result) => result.assessment !== undefined);
   const aligned = triagedResults.filter((result) => result.assessment === 'aligned').length;
   console.log(
-    `Compared ${results.length} pairs with oasdiff v${OASDIFF_VERSION}; wrote ${DOCUMENT_PATH} (${aligned}/${triagedResults.length} aligned).`,
+    `Compared ${String(results.length)} pairs with oasdiff v${OASDIFF_VERSION}; wrote ${DOCUMENT_PATH} (${String(aligned)}/${String(triagedResults.length)} aligned).`,
   );
 }
 

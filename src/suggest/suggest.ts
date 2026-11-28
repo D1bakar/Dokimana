@@ -1,7 +1,9 @@
+import * as guards from '../scanner/node-guards.js';
+import type { NodeLike } from '../scanner/node-guards.js';
 import { readdirSync, readFileSync } from 'node:fs';
 import type { Dirent } from 'node:fs';
 import { extname, relative, resolve, sep } from 'node:path';
-import { Node, Project, ScriptKind, SyntaxKind, type SourceFile } from 'ts-morph';
+import { Project, ScriptKind, ScriptTarget, SyntaxKind, type SourceFile } from 'ts-morph';
 import type { ChangeRecord, ImpactReport, NeedsHumanItem } from '../domain/types.js';
 import { toPosixPath } from '../util/paths.js';
 
@@ -104,8 +106,8 @@ interface SourceFileEntry {
 
 interface ChainSegment {
   text: string;
-  node: Node;
-  owner: Node;
+  node: NodeLike;
+  owner: NodeLike;
   kind: 'root' | 'property' | 'element';
 }
 
@@ -138,7 +140,7 @@ export function assertMappingsFile(value: unknown, label: string): asserts value
 }
 
 export function suggestChanges(input: SuggestInput): SuggestResult {
-  if (!input || !Array.isArray(input.impact?.changes)) {
+  if (!Array.isArray(input.impact.changes)) {
     throw new TypeError('impact report must include a changes array');
   }
   assertMappingsFile(input.mappings, 'mappings');
@@ -170,7 +172,7 @@ export function suggestChanges(input: SuggestInput): SuggestResult {
     useInMemoryFileSystem: true,
     skipAddingFilesFromTsConfig: true,
     skipFileDependencyResolution: true,
-    compilerOptions: { allowJs: true, target: 99 },
+    compilerOptions: { allowJs: true, target: ScriptTarget.Latest },
   });
 
   const fileTexts = new Map<string, string>();
@@ -423,31 +425,31 @@ function collectEditsForPlan(
 }
 
 function collectFromObjectLiteral(
-  literal: Node,
+  literal: NodeLike,
   prefix: string[],
   plan: ActivePlan,
   text: string,
   edits: Edit[],
 ): void {
-  if (!Node.isObjectLiteralExpression(literal)) return;
+  if (!guards.isObjectLiteralExpression(literal)) return;
   for (const member of literal.getProperties()) {
     let name: string | undefined;
-    let nameNode: Node | undefined;
-    let value: Node | undefined;
+    let nameNode: NodeLike | undefined;
+    let value: NodeLike | undefined;
     let shorthandLocal: string | undefined;
 
-    if (Node.isPropertyAssignment(member)) {
+    if (guards.isPropertyAssignment(member)) {
       nameNode = member.getNameNode();
       name = propertyNameOf(nameNode);
       value = member.getInitializer();
-    } else if (Node.isShorthandPropertyAssignment(member)) {
+    } else if (guards.isShorthandPropertyAssignment(member)) {
       nameNode = member.getNameNode();
       name = propertyNameOf(nameNode);
-      shorthandLocal = Node.isIdentifier(nameNode) ? nameNode.getText() : undefined;
+      shorthandLocal = guards.isIdentifier(nameNode) ? nameNode.getText() : undefined;
     } else {
       continue;
     }
-    if (name === undefined || nameNode === undefined) continue;
+    if (name === undefined) continue;
 
     const segments = [...prefix, name];
     if (segmentsEqual(segments, plan.segments)) {
@@ -466,52 +468,52 @@ function collectFromObjectLiteral(
 
     if (value === undefined) continue;
     const unwrapped = unwrapExpression(value);
-    if (Node.isObjectLiteralExpression(unwrapped)) {
+    if (guards.isObjectLiteralExpression(unwrapped)) {
       collectFromObjectLiteral(unwrapped, segments, plan, text, edits);
-    } else if (Node.isArrayLiteralExpression(unwrapped)) {
+    } else if (guards.isArrayLiteralExpression(unwrapped)) {
       collectFromArrayLiteral(unwrapped, [...segments, '[]'], plan, text, edits);
     }
   }
 }
 
 function collectFromArrayLiteral(
-  array: Node,
+  array: NodeLike,
   prefix: string[],
   plan: ActivePlan,
   text: string,
   edits: Edit[],
 ): void {
-  if (!Node.isArrayLiteralExpression(array)) return;
+  if (!guards.isArrayLiteralExpression(array)) return;
   for (const element of array.getElements()) {
     const unwrapped = unwrapExpression(element);
-    if (Node.isObjectLiteralExpression(unwrapped)) {
+    if (guards.isObjectLiteralExpression(unwrapped)) {
       collectFromObjectLiteral(unwrapped, prefix, plan, text, edits);
-    } else if (Node.isArrayLiteralExpression(unwrapped)) {
+    } else if (guards.isArrayLiteralExpression(unwrapped)) {
       collectFromArrayLiteral(unwrapped, [...prefix, '[]'], plan, text, edits);
     }
   }
 }
 
 function collectFromObjectBinding(
-  pattern: Node,
+  pattern: NodeLike,
   prefix: string[],
   plan: ActivePlan,
   text: string,
   edits: Edit[],
 ): void {
-  if (!Node.isObjectBindingPattern(pattern)) return;
+  if (!guards.isObjectBindingPattern(pattern)) return;
   for (const element of pattern.getElements()) {
-    if (!Node.isBindingElement(element)) continue;
+    if (!guards.isBindingElement(element)) continue;
     const propertyNode = element.getPropertyNameNode();
     const nameNode = element.getNameNode();
 
     let name: string | undefined;
-    let targetNode: Node | undefined;
+    let targetNode: NodeLike | undefined;
     let localName: string | undefined;
     if (propertyNode !== undefined) {
       name = propertyNameOf(propertyNode);
       targetNode = propertyNode;
-    } else if (Node.isIdentifier(nameNode)) {
+    } else if (guards.isIdentifier(nameNode)) {
       name = nameNode.getText();
       targetNode = nameNode;
       localName = nameNode.getText();
@@ -530,34 +532,34 @@ function collectFromObjectBinding(
 }
 
 function collectFromArrayBinding(
-  pattern: Node,
+  pattern: NodeLike,
   prefix: string[],
   plan: ActivePlan,
   text: string,
   edits: Edit[],
 ): void {
-  if (!Node.isArrayBindingPattern(pattern)) return;
+  if (!guards.isArrayBindingPattern(pattern)) return;
   for (const element of pattern.getElements()) {
-    if (!Node.isBindingElement(element)) continue;
+    if (!guards.isBindingElement(element)) continue;
     collectFromBindingName(element.getNameNode(), [...prefix, '[]'], plan, text, edits);
   }
 }
 
 function collectFromBindingName(
-  name: Node,
+  name: NodeLike,
   prefix: string[],
   plan: ActivePlan,
   text: string,
   edits: Edit[],
 ): void {
-  if (Node.isObjectBindingPattern(name)) {
+  if (guards.isObjectBindingPattern(name)) {
     collectFromObjectBinding(name, prefix, plan, text, edits);
-  } else if (Node.isArrayBindingPattern(name)) {
+  } else if (guards.isArrayBindingPattern(name)) {
     collectFromArrayBinding(name, prefix, plan, text, edits);
   }
 }
 
-function collectFromAccess(access: Node, plan: ActivePlan, text: string, edits: Edit[]): void {
+function collectFromAccess(access: NodeLike, plan: ActivePlan, text: string, edits: Edit[]): void {
   const chain = collectChain(access);
   if (chain === undefined) return;
   const terminal = matchChainSuffix(chain, plan.segments);
@@ -569,11 +571,11 @@ function collectFromAccess(access: Node, plan: ActivePlan, text: string, edits: 
     return;
   }
 
-  if (!Node.isExpressionStatement(terminal.owner.getParent())) return;
+  if (!guards.isExpressionStatement(terminal.owner.getParent())) return;
   const statement = terminal.owner.getParent();
   if (
     statement === undefined ||
-    !Node.isExpressionStatement(statement) ||
+    !guards.isExpressionStatement(statement) ||
     statement.getExpression() !== terminal.owner
   ) {
     return;
@@ -582,8 +584,8 @@ function collectFromAccess(access: Node, plan: ActivePlan, text: string, edits: 
   if (removal) pushRemovalEdit(edits, plan.change.id, removal);
 }
 
-function collectChain(node: Node): ChainSegment[] | undefined {
-  if (Node.isPropertyAccessExpression(node)) {
+function collectChain(node: NodeLike): ChainSegment[] | undefined {
+  if (guards.isPropertyAccessExpression(node)) {
     const prefix = collectChain(node.getExpression());
     if (prefix === undefined) return undefined;
     return [
@@ -596,12 +598,12 @@ function collectChain(node: Node): ChainSegment[] | undefined {
       },
     ];
   }
-  if (Node.isElementAccessExpression(node)) {
+  if (guards.isElementAccessExpression(node)) {
     const argument = node.getArgumentExpression();
     if (argument === undefined) return undefined;
     let text: string | undefined;
-    if (Node.isNumericLiteral(argument)) text = '[]';
-    else if (Node.isStringLiteral(argument) || Node.isNoSubstitutionTemplateLiteral(argument)) {
+    if (guards.isNumericLiteral(argument)) text = '[]';
+    else if (guards.isStringLiteral(argument) || guards.isNoSubstitutionTemplateLiteral(argument)) {
       text = argument.getLiteralValue();
     }
     if (text === undefined) return undefined;
@@ -610,14 +612,14 @@ function collectChain(node: Node): ChainSegment[] | undefined {
     return [...prefix, { text, node: argument, owner: node, kind: 'element' }];
   }
   if (
-    Node.isParenthesizedExpression(node) ||
-    Node.isAsExpression(node) ||
-    Node.isNonNullExpression(node) ||
-    Node.isAwaitExpression(node)
+    guards.isParenthesizedExpression(node) ||
+    guards.isAsExpression(node) ||
+    guards.isNonNullExpression(node) ||
+    guards.isAwaitExpression(node)
   ) {
     return collectChain(node.getExpression());
   }
-  if (Node.isIdentifier(node) || Node.isThisExpression(node)) {
+  if (guards.isIdentifier(node) || guards.isThisExpression(node)) {
     return [{ text: node.getText(), node, owner: node, kind: 'root' }];
   }
   return undefined;
@@ -642,7 +644,7 @@ function pushRenameEdit(
   edits: Edit[],
   text: string,
   changeId: string,
-  node: Node,
+  node: NodeLike,
   replacement: string,
 ): void {
   const start = node.getStart();
@@ -675,7 +677,7 @@ function pushRemovalEdit(edits: Edit[], changeId: string, removal: LineRemoval):
   });
 }
 
-function standaloneLineRemoval(text: string, node: Node): LineRemoval | undefined {
+function standaloneLineRemoval(text: string, node: NodeLike): LineRemoval | undefined {
   const start = node.getStart();
   const lineStart = text.lastIndexOf('\n', start - 1) + 1;
   if (!/^[ \t]*$/.test(text.slice(lineStart, start))) return undefined;
@@ -696,37 +698,37 @@ function standaloneLineRemoval(text: string, node: Node): LineRemoval | undefine
   };
 }
 
-function canRemoveObjectMember(member: Node, removal: LineRemoval): boolean {
+function canRemoveObjectMember(member: NodeLike, removal: LineRemoval): boolean {
   const parent = member.getParent();
-  if (!Node.isObjectLiteralExpression(parent)) return false;
+  if (!guards.isObjectLiteralExpression(parent)) return false;
   if (removal.suffix.includes(',')) return true;
   return parent.getProperties().length === 1;
 }
 
-function quotedTarget(node: Node, target: string): string {
+function quotedTarget(node: NodeLike, target: string): string {
   const quote = node.getText()[0];
   if (quote === "'" || quote === '"') return `${quote}${target}${quote}`;
   if (quote === '`') return `\`${target}\``;
   return target;
 }
 
-function propertyNameOf(node: Node): string | undefined {
-  if (Node.isIdentifier(node)) return node.getText();
-  if (Node.isStringLiteral(node) || Node.isNoSubstitutionTemplateLiteral(node)) {
+function propertyNameOf(node: NodeLike): string | undefined {
+  if (guards.isIdentifier(node)) return node.getText();
+  if (guards.isStringLiteral(node) || guards.isNoSubstitutionTemplateLiteral(node)) {
     return node.getLiteralValue();
   }
-  if (Node.isNumericLiteral(node)) return node.getText();
+  if (guards.isNumericLiteral(node)) return node.getText();
   return undefined;
 }
 
-function unwrapExpression(node: Node): Node {
+function unwrapExpression(node: NodeLike): NodeLike {
   let current = node;
   for (;;) {
     if (
-      Node.isParenthesizedExpression(current) ||
-      Node.isAsExpression(current) ||
-      Node.isNonNullExpression(current) ||
-      Node.isAwaitExpression(current)
+      guards.isParenthesizedExpression(current) ||
+      guards.isAsExpression(current) ||
+      guards.isNonNullExpression(current) ||
+      guards.isAwaitExpression(current)
     ) {
       current = current.getExpression();
       continue;
@@ -857,7 +859,9 @@ function buildUnifiedHunks(oldLines: string[], newLines: string[]): string[] {
     }
     const oldStart = oldCount === 0 ? oldLine - 1 : oldLine;
     const newStart = newCount === 0 ? newLine - 1 : newLine;
-    output.push(`@@ -${oldStart},${oldCount} +${newStart},${newCount} @@`);
+    output.push(
+      `@@ -${String(oldStart)},${String(oldCount)} +${String(newStart)},${String(newCount)} @@`,
+    );
 
     for (let index = range.start; index <= range.end; index += 1) {
       const op = ops[index];
@@ -893,9 +897,11 @@ function diffLines(oldLines: string[], newLines: string[]): DiffOp[] {
     for (let j = newCount - 1; j >= 0; j -= 1) {
       const oldLine = oldLines[i];
       const newLine = newLines[j];
+      const row = lcs[i];
+      if (row === undefined) throw new Error('LCS row is missing');
       const right = lcs[i + 1]?.[j] ?? 0;
-      const down = lcs[i]?.[j + 1] ?? 0;
-      lcs[i]![j] = oldLine === newLine ? (lcs[i + 1]?.[j + 1] ?? 0) + 1 : Math.max(right, down);
+      const down = row[j + 1] ?? 0;
+      row[j] = oldLine === newLine ? (lcs[i + 1]?.[j + 1] ?? 0) + 1 : Math.max(right, down);
     }
   }
 

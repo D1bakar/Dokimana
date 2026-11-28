@@ -52,7 +52,7 @@ function parsePackageJson(value: unknown, label: string): PackageJson {
     fail(`${label} must contain a JSON object.`);
     return {};
   }
-  return value as PackageJson;
+  return value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -60,7 +60,7 @@ export async function fetchStripeSpec(input: FetchStripeSpecInput): Promise<Fetc
 
   const response = await fetchImpl(url);
   if (!response.ok) {
-    throw new Error(`Unable to download the pinned Stripe spec: HTTP ${response.status}.`);
+    throw new Error(`Unable to download the pinned Stripe spec: HTTP ${String(response.status)}.`);
   }
   const text = await response.text();
   let parsed: unknown;

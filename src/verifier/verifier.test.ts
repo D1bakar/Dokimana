@@ -22,9 +22,9 @@ class FixtureRunner implements ContainerExecutionPort {
 
   constructor(private readonly results: Record<'old' | 'new', ContainerExecutionResult>) {}
 
-  async execute(request: ContainerExecutionRequest): Promise<ContainerExecutionResult> {
+  execute(request: ContainerExecutionRequest): Promise<ContainerExecutionResult> {
     this.requests.push(request);
-    return this.results[request.apiVersion];
+    return Promise.resolve(this.results[request.apiVersion]);
   }
 }
 
@@ -57,8 +57,10 @@ describe('Verifier', () => {
 
     expect(result.classification).toBe('equivalent');
     expect(runner.requests.map((request) => request.apiVersion).sort()).toEqual(['new', 'old']);
-    expect(runner.requests.every((request) => request.isolation.secrets === 'none')).toBe(true);
-    expect(runner.requests.every((request) => request.isolation.network === 'none')).toBe(true);
+    expect(runner.requests.map((request) => request.isolation)).toEqual([
+      { network: 'none', secrets: 'none', readOnlyRepository: true, timeoutSeconds: 300 },
+      { network: 'none', secrets: 'none', readOnlyRepository: true, timeoutSeconds: 300 },
+    ]);
   });
 
   it('classifies a changed output as intentional only when it matches an explicit expectation', async () => {

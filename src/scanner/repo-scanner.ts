@@ -1,8 +1,10 @@
+import * as guards from './node-guards.js';
+import type { NodeLike } from './node-guards.js';
 import { readdir } from 'node:fs/promises';
 import { extname, join, relative, resolve } from 'node:path';
 import {
-  Node,
   Project,
+  ScriptTarget,
   SyntaxKind,
   type BindingElement,
   type CallExpression,
@@ -108,7 +110,7 @@ export class RepoScanner {
     const project = new Project({
       skipAddingFilesFromTsConfig: true,
       skipFileDependencyResolution: true,
-      compilerOptions: { allowJs: true, target: 99 },
+      compilerOptions: { allowJs: true, target: ScriptTarget.Latest },
     });
     if (sourcePaths.length > 0) project.addSourceFilesAtPaths(sourcePaths);
 
@@ -201,13 +203,13 @@ class FileScan {
       if (!initializer) continue;
       const info = this.findSdkCall(initializer);
       const nameNode = declaration.getNameNode();
-      if (Node.isIdentifier(nameNode) && info) {
+      if (guards.isIdentifier(nameNode) && info) {
         this.derived.set(nameNode.getText(), {
           parts: info.parts,
           ...(info.operation === undefined ? {} : { operation: info.operation }),
         });
       }
-      if (Node.isObjectBindingPattern(nameNode) && info) {
+      if (guards.isObjectBindingPattern(nameNode) && info) {
         for (const element of nameNode.getElements()) {
           const name = bindingPropertyName(element);
           if (name === undefined) continue;
@@ -222,7 +224,7 @@ class FileScan {
     for (const assignment of sourceFile.getDescendantsOfKind(SyntaxKind.BinaryExpression)) {
       if (assignment.getOperatorToken().getKind() !== SyntaxKind.EqualsToken) continue;
       const left = assignment.getLeft();
-      if (!Node.isIdentifier(left)) continue;
+      if (!guards.isIdentifier(left)) continue;
       const info = this.findSdkCall(assignment.getRight());
       if (!info) continue;
       this.derived.set(left.getText(), {
@@ -238,11 +240,11 @@ class FileScan {
     }
     for (const call of this.options.sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
       const expression = call.getExpression();
-      if (!Node.isIdentifier(expression)) continue;
+      if (!guards.isIdentifier(expression)) continue;
       const eventType = this.eventTypes.get(expression.getText());
       if (!eventType) continue;
       const [argument] = call.getArguments();
-      if (argument && Node.isIdentifier(argument)) {
+      if (argument && guards.isIdentifier(argument)) {
         this.eventTypes.set(argument.getText(), eventType);
       }
     }
@@ -272,7 +274,7 @@ class FileScan {
             field,
             operation: info.operation,
             context: field.segments[0] === 'expand' ? 'expand' : 'request',
-            add: (change, matchedSegments, confidence) =>
+            add: (change, matchedSegments, confidence) => {
               this.addFinding({
                 change,
                 position: call.getStart(),
@@ -287,7 +289,8 @@ class FileScan {
                     ? 'The SDK receiver and object-literal key are statically resolved.'
                     : 'The object literal was resolved through a local identifier.',
                 ...(info.operation === undefined ? {} : { openApiOperation: info.operation.label }),
-              }),
+              });
+            },
           });
         }
       }
@@ -299,7 +302,7 @@ class FileScan {
       SyntaxKind.VariableDeclaration,
     )) {
       const nameNode = declaration.getNameNode();
-      if (!Node.isObjectBindingPattern(nameNode)) continue;
+      if (!guards.isObjectBindingPattern(nameNode)) continue;
       const initializer = declaration.getInitializer();
       if (!initializer) continue;
       const info = this.findSdkCall(initializer);
@@ -343,7 +346,8 @@ class FileScan {
       SyntaxKind.PropertyAccessExpression,
     )) {
       const parent = property.getParent();
-      if (Node.isPropertyAccessExpression(parent) && parent.getExpression() === property) continue;
+      if (guards.isPropertyAccessExpression(parent) && parent.getExpression() === property)
+        continue;
       const chain = propertyChain(property, this.options.facts.constructorNames);
       const derivedRoot = this.longestRoot(chain, this.derived);
       const typedRoot = this.longestRoot(chain, this.options.facts.typedNames);
@@ -410,9 +414,9 @@ class FileScan {
       const root = this.eventRoot(statement);
       if (!root) continue;
       for (const clause of statement.getClauses()) {
-        if (!Node.isCaseClause(clause)) continue;
+        if (!guards.isCaseClause(clause)) continue;
         const expression = clause.getExpression();
-        if (!expression || !Node.isStringLiteral(expression)) {
+        if (!guards.isStringLiteral(expression)) {
           this.recordUnresolved({
             kind: 'dynamic_webhook_case',
             position: clause.getStart(),
@@ -427,7 +431,7 @@ class FileScan {
         this.eventTypes.set(root, eventType);
         for (const property of clause.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression)) {
           const parent = property.getParent();
-          if (Node.isPropertyAccessExpression(parent) && parent.getExpression() === property) {
+          if (guards.isPropertyAccessExpression(parent) && parent.getExpression() === property) {
             continue;
           }
           const chain = propertyChain(property, this.options.facts.constructorNames);
@@ -459,7 +463,8 @@ class FileScan {
       SyntaxKind.PropertyAccessExpression,
     )) {
       const parent = property.getParent();
-      if (Node.isPropertyAccessExpression(parent) && parent.getExpression() === property) continue;
+      if (guards.isPropertyAccessExpression(parent) && parent.getExpression() === property)
+        continue;
       const chain = propertyChain(property, this.options.facts.constructorNames);
       const root = chain[0];
       if (!root) continue;
@@ -494,7 +499,7 @@ class FileScan {
       const chain = propertyChain(element, this.options.facts.constructorNames);
       const root = this.longestRoot(chain, this.options.facts.clientNames);
       const argument = element.getArgumentExpression();
-      if (!root || !argument || Node.isStringLiteral(argument)) continue;
+      if (!root || !argument || guards.isStringLiteral(argument)) continue;
       this.recordUnresolved({
         kind: 'dynamic_call',
         position: element.getStart(),
@@ -505,9 +510,9 @@ class FileScan {
 
     for (const call of this.options.sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
       const expression = call.getExpression();
-      if (!Node.isIdentifier(expression) || expression.getText() !== 'fetch') continue;
+      if (!guards.isIdentifier(expression) || expression.getText() !== 'fetch') continue;
       const [argument] = call.getArguments();
-      if (!argument || !Node.isStringLiteral(argument)) continue;
+      if (!argument || !guards.isStringLiteral(argument)) continue;
       const url = argument.getLiteralValue();
       if (!url.includes('/v1/')) continue;
       this.recordUnresolved({
@@ -585,13 +590,13 @@ class FileScan {
     });
   }
 
-  private findSdkCall(node: Node): SdkCallInfo | undefined {
-    const calls = Node.isCallExpression(node)
+  private findSdkCall(node: NodeLike): SdkCallInfo | undefined {
+    const calls = guards.isCallExpression(node)
       ? [node]
       : node.getDescendantsOfKind(SyntaxKind.CallExpression);
     for (const call of calls) {
       const callee = call.getExpression();
-      if (!Node.isPropertyAccessExpression(callee)) continue;
+      if (!guards.isPropertyAccessExpression(callee)) continue;
       const chain = propertyChain(callee, this.options.facts.constructorNames);
       const root = this.longestRoot(chain, this.options.facts.clientNames);
       if (!root) continue;
@@ -608,9 +613,9 @@ class FileScan {
     return undefined;
   }
 
-  private extractArgument(argument: Node): ExtractionResult {
+  private extractArgument(argument: NodeLike): ExtractionResult {
     const value = unwrap(argument);
-    if (Node.isSpreadElement(value)) {
+    if (guards.isSpreadElement(value)) {
       return {
         fields: [],
         issues: [
@@ -623,8 +628,8 @@ class FileScan {
         ],
       };
     }
-    if (Node.isObjectLiteralExpression(value)) return extractLiteral(value, 'high');
-    if (Node.isIdentifier(value)) {
+    if (guards.isObjectLiteralExpression(value)) return extractLiteral(value, 'high');
+    if (guards.isIdentifier(value)) {
       const resolved = this.resolveObjectLiteral(value.getText());
       if (resolved) return extractLiteral(resolved, 'medium');
       if (value.getText() === 'undefined') return { fields: [], issues: [] };
@@ -656,8 +661,8 @@ class FileScan {
       const initializer = declaration.getInitializer();
       if (!initializer) return undefined;
       const value = unwrap(initializer);
-      if (Node.isObjectLiteralExpression(value)) return value;
-      if (Node.isIdentifier(value)) return this.resolveObjectLiteral(value.getText(), seen);
+      if (guards.isObjectLiteralExpression(value)) return value;
+      if (guards.isIdentifier(value)) return this.resolveObjectLiteral(value.getText(), seen);
       return undefined;
     }
     return undefined;
@@ -676,11 +681,11 @@ class FileScan {
 
   private eventRoot(statement: SwitchStatement): string | undefined {
     const expression = statement.getExpression();
-    if (!Node.isPropertyAccessExpression(expression) || expression.getName() !== 'type') {
+    if (!guards.isPropertyAccessExpression(expression) || expression.getName() !== 'type') {
       return undefined;
     }
     const target = expression.getExpression();
-    return Node.isIdentifier(target) ? target.getText() : undefined;
+    return guards.isIdentifier(target) ? target.getText() : undefined;
   }
 
   private changeOperationMatchesResource(change: ChangeRecord, resource: string): boolean {
@@ -713,7 +718,7 @@ function extractFields(
   issues: ExtractionIssue[],
 ): void {
   for (const property of literal.getProperties()) {
-    if (Node.isSpreadAssignment(property)) {
+    if (guards.isSpreadAssignment(property)) {
       issues.push({
         kind: 'spread_argument',
         position: property.getStart(),
@@ -723,11 +728,11 @@ function extractFields(
       });
       continue;
     }
-    if (!Node.isPropertyAssignment(property) && !Node.isShorthandPropertyAssignment(property)) {
+    if (!guards.isPropertyAssignment(property) && !guards.isShorthandPropertyAssignment(property)) {
       continue;
     }
-    const nameNode = Node.isPropertyAssignment(property) ? property.getNameNode() : undefined;
-    if (nameNode && Node.isComputedPropertyName(nameNode)) {
+    const nameNode = guards.isPropertyAssignment(property) ? property.getNameNode() : undefined;
+    if (nameNode && guards.isComputedPropertyName(nameNode)) {
       issues.push({
         kind: 'dynamic_call',
         position: nameNode.getStart(),
@@ -738,12 +743,14 @@ function extractFields(
     }
     const name = nameNode
       ? propertyName(nameNode)
-      : Node.isShorthandPropertyAssignment(property)
+      : guards.isShorthandPropertyAssignment(property)
         ? property.getName()
         : undefined;
     if (name === undefined) continue;
     const segments = [...prefix, name];
-    const initializer = Node.isPropertyAssignment(property) ? property.getInitializer() : undefined;
+    const initializer = guards.isPropertyAssignment(property)
+      ? property.getInitializer()
+      : undefined;
     const fieldValue = literalValue(initializer);
     fields.push({
       segments,
@@ -752,17 +759,17 @@ function extractFields(
     });
     if (!initializer) continue;
     const initializerValue = unwrap(initializer);
-    if (Node.isObjectLiteralExpression(initializerValue)) {
+    if (guards.isObjectLiteralExpression(initializerValue)) {
       extractFields(initializerValue, confidence, segments, fields, issues);
       continue;
     }
-    if (Node.isArrayLiteralExpression(initializerValue)) {
+    if (guards.isArrayLiteralExpression(initializerValue)) {
       fields.push({ segments: [...segments, '[]'], confidence });
       for (const element of initializerValue.getElements()) {
         const item = unwrap(element);
-        if (Node.isStringLiteral(item)) {
+        if (guards.isStringLiteral(item)) {
           fields.push({ segments: [...segments, item.getLiteralValue()], confidence });
-        } else if (Node.isObjectLiteralExpression(item)) {
+        } else if (guards.isObjectLiteralExpression(item)) {
           extractFields(item, confidence, [...segments, '[]'], fields, issues);
         }
       }
@@ -770,16 +777,16 @@ function extractFields(
   }
 }
 
-function literalValue(node: Node | undefined): string | undefined {
+function literalValue(node: NodeLike | undefined): string | undefined {
   if (!node) return undefined;
   const value = unwrap(node);
-  if (Node.isStringLiteral(value) || Node.isNoSubstitutionTemplateLiteral(value)) {
+  if (guards.isStringLiteral(value) || guards.isNoSubstitutionTemplateLiteral(value)) {
     return value.getLiteralValue();
   }
-  if (Node.isNumericLiteral(value) || Node.isBigIntLiteral(value)) return value.getText();
-  if (Node.isTrueLiteral(value)) return 'true';
-  if (Node.isFalseLiteral(value)) return 'false';
-  if (Node.isNullLiteral(value)) return 'null';
+  if (guards.isNumericLiteral(value) || guards.isBigIntLiteral(value)) return value.getText();
+  if (guards.isTrueLiteral(value)) return 'true';
+  if (guards.isFalseLiteral(value)) return 'false';
+  if (guards.isNullLiteral(value)) return 'null';
   return undefined;
 }
 
@@ -826,12 +833,12 @@ function normalizeOperation(value: string): string {
   return value.replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
-function propertyName(node: Node): string | undefined {
-  if (Node.isIdentifier(node)) return node.getText();
-  if (Node.isStringLiteral(node) || Node.isNoSubstitutionTemplateLiteral(node)) {
+function propertyName(node: NodeLike): string | undefined {
+  if (guards.isIdentifier(node)) return node.getText();
+  if (guards.isStringLiteral(node) || guards.isNoSubstitutionTemplateLiteral(node)) {
     return node.getLiteralValue();
   }
-  if (Node.isNumericLiteral(node)) return node.getText();
+  if (guards.isNumericLiteral(node)) return node.getText();
   return undefined;
 }
 
@@ -842,45 +849,45 @@ function bindingPropertyName(element: BindingElement): string | undefined {
     if (name !== undefined) return name;
   }
   const nameNode = element.getNameNode();
-  return Node.isIdentifier(nameNode) ? nameNode.getText() : undefined;
+  return guards.isIdentifier(nameNode) ? nameNode.getText() : undefined;
 }
 
-function propertyChain(node: Node, constructorNames: ReadonlySet<string>): string[] {
+function propertyChain(node: NodeLike, constructorNames: ReadonlySet<string>): string[] {
   const segments: string[] = [];
-  let current: Node = node;
+  let current: NodeLike = node;
   for (;;) {
-    if (Node.isPropertyAccessExpression(current)) {
+    if (guards.isPropertyAccessExpression(current)) {
       segments.unshift(current.getName());
       current = current.getExpression();
       continue;
     }
-    if (Node.isElementAccessExpression(current)) {
+    if (guards.isElementAccessExpression(current)) {
       const argument = current.getArgumentExpression();
       const name =
-        argument && Node.isStringLiteral(argument) ? argument.getLiteralValue() : '[dynamic]';
+        argument && guards.isStringLiteral(argument) ? argument.getLiteralValue() : '[dynamic]';
       segments.unshift(name);
       current = current.getExpression();
       continue;
     }
     if (
-      Node.isParenthesizedExpression(current) ||
-      Node.isAsExpression(current) ||
-      Node.isNonNullExpression(current) ||
-      Node.isSatisfiesExpression(current) ||
-      Node.isAwaitExpression(current)
+      guards.isParenthesizedExpression(current) ||
+      guards.isAsExpression(current) ||
+      guards.isNonNullExpression(current) ||
+      guards.isSatisfiesExpression(current) ||
+      guards.isAwaitExpression(current)
     ) {
       current = current.getExpression();
       continue;
     }
-    if (Node.isIdentifier(current)) {
+    if (guards.isIdentifier(current)) {
       segments.unshift(current.getText());
       return segments;
     }
-    if (Node.isThisExpression(current)) {
+    if (guards.isThisExpression(current)) {
       segments.unshift('this');
       return segments;
     }
-    if (Node.isNewExpression(current)) {
+    if (guards.isNewExpression(current)) {
       const text = current.getExpression().getText();
       const isStripe = [...constructorNames].some(
         (name) => text === name || text.startsWith(`${name}.`),
@@ -894,15 +901,15 @@ function propertyChain(node: Node, constructorNames: ReadonlySet<string>): strin
   }
 }
 
-function unwrap(node: Node): Node {
+function unwrap(node: NodeLike): NodeLike {
   let current = node;
   for (;;) {
     if (
-      Node.isParenthesizedExpression(current) ||
-      Node.isAsExpression(current) ||
-      Node.isNonNullExpression(current) ||
-      Node.isSatisfiesExpression(current) ||
-      Node.isAwaitExpression(current)
+      guards.isParenthesizedExpression(current) ||
+      guards.isAsExpression(current) ||
+      guards.isNonNullExpression(current) ||
+      guards.isSatisfiesExpression(current) ||
+      guards.isAwaitExpression(current)
     ) {
       current = current.getExpression();
       continue;
@@ -957,7 +964,7 @@ function buildCoverageNotes(
   const extensions = [...SOURCE_EXTENSIONS].sort().join(', ');
   const ignored = [...IGNORED_DIRECTORIES].sort().join(', ');
   const notes = [
-    `${sourceFileCount} source file(s) scanned; extensions inspected: ${extensions}; ignored directories: ${ignored}.`,
+    `${String(sourceFileCount)} source file(s) scanned; extensions inspected: ${extensions}; ignored directories: ${ignored}.`,
     'Type annotations are read textually; project path aliases and generated code are not resolved. Dynamic SDK calls, REST fetch calls, and runtime values are not considered verified coverage.',
   ];
   if (sourceFileCount === 0) {
@@ -968,13 +975,13 @@ function buildCoverageNotes(
   if (needsHuman.length > 0) {
     const kinds = [...new Set(needsHuman.map((item) => item.kind))].sort().join(', ');
     notes.push(
-      `${needsHuman.length} change(s) (${kinds}) have no static call-site mapping and need human review.`,
+      `${String(needsHuman.length)} change(s) (${kinds}) have no static call-site mapping and need human review.`,
     );
   }
   if (unresolved.length > 0) {
     const kinds = [...new Set(unresolved.map((item) => item.kind))].sort().join(', ');
     notes.push(
-      `${unresolved.length} unresolved site(s) (${kinds}) were recorded, including spread and dynamic arguments.`,
+      `${String(unresolved.length)} unresolved site(s) (${kinds}) were recorded, including spread and dynamic arguments.`,
     );
   }
   return notes;

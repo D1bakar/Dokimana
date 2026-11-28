@@ -53,10 +53,6 @@ interface RuleDetail {
   level: SarifLevel;
 }
 
-interface EvidenceReportWithUnresolved extends EvidenceReport {
-  unresolved?: UnresolvedItem[];
-}
-
 const RULE_PREFIX = 'dokimana/';
 const NEEDS_HUMAN_RULE_ID = `${RULE_PREFIX}needs-human`;
 const UNRESOLVED_RULE_ID = `${RULE_PREFIX}unresolved`;
@@ -79,7 +75,7 @@ function changeRuleId(kind: ChangeKind): string {
 }
 
 function readUnresolved(report: EvidenceReport): UnresolvedItem[] {
-  const value = (report as EvidenceReportWithUnresolved).unresolved;
+  const value = report.unresolved;
   return Array.isArray(value) ? value : [];
 }
 

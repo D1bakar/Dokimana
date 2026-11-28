@@ -19,21 +19,31 @@ export function validateStripeKey(value: string | undefined): KeySafetyResult {
   };
 }
 
-export function assertSafeTestModeKeys(environment: Record<string, string | undefined>): void {
+export function checkSafeTestModeKeys(
+  environment: Record<string, string | undefined>,
+): KeySafetyResult {
   for (const [name, value] of Object.entries(environment)) {
     if (!value) continue;
 
     if (containsLiveKey(value)) {
-      throw new Error(
-        'Live Stripe secret keys are forbidden. Remove sk_live and rk_live keys before execution.',
-      );
+      return {
+        safe: false,
+        reason:
+          'Live Stripe secret keys are forbidden. Remove sk_live and rk_live keys before execution.',
+      };
     }
 
     if (/^STRIPE_(?:SECRET_KEY|API_KEY|RESTRICTED_KEY)$/i.test(name)) {
       const result = validateStripeKey(value);
-      if (!result.safe) throw new Error(`${name}: ${result.reason}`);
+      if (!result.safe) return { safe: false, reason: `${name}: ${result.reason}` };
     }
   }
+  return { safe: true, keyType: 'none' };
+}
+
+export function assertSafeTestModeKeys(environment: Record<string, string | undefined>): void {
+  const result = checkSafeTestModeKeys(environment);
+  if (!result.safe) throw new Error(result.reason);
 }
 
 function containsLiveKey(value: string): boolean {

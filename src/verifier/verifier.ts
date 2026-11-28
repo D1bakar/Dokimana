@@ -107,7 +107,9 @@ function collectDifferencePaths(oldValue: unknown, newValue: unknown, path = '$'
     const paths: string[] = [];
     const length = Math.max(oldValue.length, newValue.length);
     for (let index = 0; index < length; index += 1) {
-      paths.push(...collectDifferencePaths(oldValue[index], newValue[index], `${path}[${index}]`));
+      paths.push(
+        ...collectDifferencePaths(oldValue[index], newValue[index], `${path}[${String(index)}]`),
+      );
     }
     return paths;
   }
