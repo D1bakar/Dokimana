@@ -52,6 +52,7 @@ npm ci
 npm run build
 npm test
 npm run lint
+npm run check:architecture
 npm run format:check
 ```
 

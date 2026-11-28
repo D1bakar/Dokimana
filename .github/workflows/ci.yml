@@ -22,6 +22,10 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npm run lint
+      - name: Check circular dependencies
+        run: npm run check:cycles
+      - name: Check unused exports
+        run: npm run check:dead-code
       - run: npm run format:check
       - run: npm run perf:check
       - name: Install pinned oasdiff
